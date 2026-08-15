@@ -11,14 +11,21 @@
       </div>
 
       <div class="chat__bartools">
-        <span
-          v-if="convo.context"
+        <button
+          v-if="configured"
           class="chat__ctx"
+          type="button"
           :class="ctxClass"
-          :title="`${formatTokens(convo.context.used)} of ${formatTokens(convo.context.window)} context tokens used`"
+          :disabled="running"
+          :title="
+            convo.context
+              ? `${formatTokens(convo.context.used)} of ${formatTokens(convo.context.window)} context tokens used — click to run /context`
+              : 'Run /context'
+          "
+          @click="sendCommand('/context')"
         >
-          {{ convo.context.percentLeft.toFixed(0) }}% context
-        </span>
+          {{ convo.context ? `${convo.context.percentLeft.toFixed(0)}% context` : '/context' }}
+        </button>
         <span v-if="convo.totals.cost" class="chat__total" title="Total cost this conversation">
           {{ formatCost(convo.totals.cost) }}
         </span>
@@ -34,7 +41,8 @@
       </div>
     </header>
 
-    <div v-if="showHistory" class="hist card">
+    <div v-if="showHistory" class="side-backdrop" @click="showHistory = false"></div>
+    <aside v-if="showHistory" class="hist card">
       <div class="hist__head">
         <b>Chat history</b>
         <button class="btn" type="button" @click="showHistory = false">Close</button>
@@ -71,7 +79,7 @@
           </button>
         </li>
       </ul>
-    </div>
+    </aside>
 
     <SettingsDrawer
       v-if="showSettings"
@@ -324,6 +332,12 @@ export default {
       this.controller?.abort()
     },
 
+    sendCommand(text) {
+      if (this.running || !this.configured) return
+      this.draft = text
+      this.send()
+    },
+
     async send() {
       const prompt = this.draft.trim()
       if (!prompt || this.running || !this.configured) return
@@ -414,7 +428,7 @@ export default {
   flex-direction: column;
   gap: 12px;
   height: calc(100vh - 100px);
-  max-width: 960px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
@@ -457,13 +471,25 @@ export default {
 }
 
 .chat__ctx {
+  font: inherit;
   font-size: 11.5px;
   color: var(--good);
+  background: transparent;
   border: 1px solid color-mix(in srgb, var(--good) 40%, var(--border));
   border-radius: 999px;
   padding: 2px 9px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.chat__ctx:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+}
+
+.chat__ctx:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .chat__ctx--warn {
@@ -476,11 +502,27 @@ export default {
   border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
 }
 
+.side-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
 .hist {
-  padding: 14px 16px;
-  margin-bottom: 14px;
-  max-height: 46vh;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(360px, 92vw);
+  padding: 16px;
+  border-radius: 0;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
   overflow-y: auto;
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.35);
 }
 
 .hist__head {

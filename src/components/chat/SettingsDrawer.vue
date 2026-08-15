@@ -1,5 +1,6 @@
 <template>
-  <div class="drawer card">
+  <div class="modal-backdrop" @click.self="$emit('close')">
+    <div class="drawer card" role="dialog" aria-modal="true">
     <div class="drawer__head">
       <b>Bridge settings</b>
       <button class="btn" type="button" @click="$emit('close')">Close</button>
@@ -118,6 +119,7 @@
         <code>{{ health.defaultModel }}</code>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -162,9 +164,23 @@ export default {
 </script>
 
 <style scoped>
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
 .drawer {
+  width: 100%;
+  max-width: 480px;
+  margin: auto;
   padding: 16px;
-  margin-bottom: 14px;
 }
 
 .drawer__head {
