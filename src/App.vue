@@ -17,6 +17,11 @@ export default {
     }
     window.addEventListener('resize', this.applyViewport)
     window.addEventListener('orientationchange', this.applyViewport)
+    // The keyboard often opens/closes a beat after focus changes, and some
+    // browsers don't emit a viewport event for it — re-measure a few times
+    // around each focus change so we still catch the settled size.
+    window.addEventListener('focusin', this.remeasure)
+    window.addEventListener('focusout', this.remeasure)
   },
   beforeUnmount() {
     const vv = window.visualViewport
@@ -26,6 +31,9 @@ export default {
     }
     window.removeEventListener('resize', this.applyViewport)
     window.removeEventListener('orientationchange', this.applyViewport)
+    window.removeEventListener('focusin', this.remeasure)
+    window.removeEventListener('focusout', this.remeasure)
+    this.clearRemeasure()
   },
   methods: {
     // Pin the app to the *visible* viewport. When the mobile keyboard opens the
@@ -39,6 +47,19 @@ export default {
       const root = document.documentElement.style
       root.setProperty('--app-vh', `${Math.round(height)}px`)
       root.setProperty('--app-top', `${Math.round(top)}px`)
+    },
+
+    remeasure() {
+      this.clearRemeasure()
+      this.applyViewport()
+      this._remeasure = [80, 200, 400, 700].map((ms) =>
+        setTimeout(this.applyViewport, ms)
+      )
+    },
+
+    clearRemeasure() {
+      ;(this._remeasure || []).forEach(clearTimeout)
+      this._remeasure = []
     },
   },
 }
@@ -59,6 +80,14 @@ export default {
 }
 
 @media (max-width: 640px) {
+  /* Lock the document so only the app owns the visible area; without this the
+     page itself can scroll and slide the composer back under the keyboard. */
+  html,
+  body {
+    height: var(--app-vh, 100dvh);
+    overflow: hidden;
+  }
+
   /* Fix the app over the visible viewport so the on-screen keyboard can never
      cover the composer — it simply sits at the bottom of the visible area. */
   .app {
@@ -66,7 +95,8 @@ export default {
     left: 0;
     right: 0;
     top: var(--app-top, 0px);
-    height: var(--app-vh, 100vh);
+    height: var(--app-vh, 100dvh);
+    min-height: 0;
     overflow: hidden;
   }
 
