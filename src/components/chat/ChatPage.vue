@@ -1,11 +1,21 @@
 <template>
-  <div class="workspace">
-    <aside class="sidebar card">
+  <div class="workspace" :class="{ 'workspace--collapsed': !sidebarOpen }">
+    <aside v-if="sidebarOpen" class="sidebar card">
       <div class="sidebar__head">
         <b>Chats<span v-if="history.length"> · {{ history.length }}</span></b>
-        <button class="btn" type="button" :disabled="running" @click="startNewChat">
-          New
-        </button>
+        <div class="sidebar__headtools">
+          <button class="btn" type="button" :disabled="running" @click="startNewChat">
+            New
+          </button>
+          <button
+            class="sidebar__collapse"
+            type="button"
+            title="Hide chat history"
+            @click="toggleSidebar"
+          >
+            ‹
+          </button>
+        </div>
       </div>
 
       <p v-if="!history.length" class="sidebar__empty">
@@ -48,6 +58,15 @@
     <div class="chat">
       <header class="chat__bar card">
         <div class="chat__id">
+          <button
+            v-if="!sidebarOpen"
+            class="sidebar__collapse chat__reveal"
+            type="button"
+            title="Show chat history"
+            @click="toggleSidebar"
+          >
+            ☰
+          </button>
           <b class="chat__brand">Trợ lý của Lan Hương, phục vụ mọi nơi</b>
           <span v-if="convo.model" class="chat__pill">{{ convo.model }}</span>
           <span v-if="convo.permissionMode" class="chat__pill">{{ convo.permissionMode }}</span>
@@ -221,6 +240,7 @@ export default {
       runId: '',
       controller: null,
       showSettings: false,
+      sidebarOpen: localStorage.getItem('sidebarOpen') !== '0',
     }
   },
   computed: {
@@ -259,6 +279,11 @@ export default {
 
     refreshHistory() {
       this.history = listConversations()
+    },
+
+    toggleSidebar() {
+      this.sidebarOpen = !this.sidebarOpen
+      localStorage.setItem('sidebarOpen', this.sidebarOpen ? '1' : '0')
     },
 
     persist() {
@@ -520,6 +545,38 @@ export default {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.sidebar__headtools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__collapse {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar__collapse:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.chat__reveal {
+  margin-right: 2px;
 }
 
 .sidebar__empty {
