@@ -28,13 +28,17 @@ export default {
     window.removeEventListener('orientationchange', this.applyViewport)
   },
   methods: {
-    // Mirror the *visible* viewport (which shrinks when the mobile keyboard
-    // opens) into a CSS var so the layout can size itself to it and keep the
-    // composer above the keyboard.
+    // Pin the app to the *visible* viewport. When the mobile keyboard opens the
+    // visual viewport both shrinks (height) and can be scrolled down within the
+    // layout viewport (offsetTop); mirroring both into CSS vars lets us fix the
+    // app exactly over the visible area so the composer stays above the keyboard.
     applyViewport() {
       const vv = window.visualViewport
       const height = vv ? vv.height : window.innerHeight
-      document.documentElement.style.setProperty('--app-vh', `${Math.round(height)}px`)
+      const top = vv ? vv.offsetTop : 0
+      const root = document.documentElement.style
+      root.setProperty('--app-vh', `${Math.round(height)}px`)
+      root.setProperty('--app-top', `${Math.round(top)}px`)
     },
   },
 }
@@ -55,7 +59,13 @@ export default {
 }
 
 @media (max-width: 640px) {
+  /* Fix the app over the visible viewport so the on-screen keyboard can never
+     cover the composer — it simply sits at the bottom of the visible area. */
   .app {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--app-top, 0px);
     height: var(--app-vh, 100vh);
     overflow: hidden;
   }
