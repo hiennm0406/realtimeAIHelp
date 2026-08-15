@@ -36,6 +36,9 @@ from urllib.parse import parse_qs, urlparse
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(ROOT)
 CONFIG_PATH = os.path.join(ROOT, "config.json")
+# Every run's transcript is written here as <runId>.jsonl, so a run survives a
+# bridge restart and a client can still replay its result on reconnect.
+RUNS_DIR = os.path.join(ROOT, "runs")
 
 IS_WINDOWS = os.name == "nt"
 
@@ -70,10 +73,11 @@ DEFAULT_CONFIG = {
     "max_concurrent": 2,
     # Hard stop for a single run, in seconds.
     "run_timeout_seconds": 1800,
-    # How long a finished run is kept in memory so a returning browser can still
-    # replay its result. After this, the run is dropped and reconnecting to it
-    # returns 404. Raise it if you want to be able to step away for longer.
-    "run_retention_seconds": 3600,
+    # How long a finished run is kept (in memory and on disk) so a returning
+    # browser can still replay its result. After this, the run is dropped and its
+    # transcript file deleted; reconnecting to it returns 404. Raise it to step
+    # away for longer.
+    "run_retention_seconds": 21600,
 }
 
 PERMISSION_MODES = {
@@ -216,9 +220,47 @@ class Run:
         self.proc = None
         self.started_at = time.time()
         self.finished_at = None
+        self._log = None
+        self._open_log()
+
+    def path(self):
+        return os.path.join(RUNS_DIR, self.id + ".jsonl")
+
+    def _open_log(self):
+        """Start the on-disk transcript with a meta line describing the run."""
+        try:
+            os.makedirs(RUNS_DIR, exist_ok=True)
+            self._log = open(self.path(), "a", encoding="utf-8")
+            self._write_log(
+                {
+                    "kind": "meta",
+                    "runId": self.id,
+                    "prompt": self.prompt,
+                    "cwd": self.cwd,
+                    "command": self.command,
+                    "conversationId": self.conversation_id,
+                    "startedAt": self.started_at,
+                }
+            )
+        except Exception:
+            # Disk trouble shouldn't take the run down; it just won't survive a
+            # restart. In-memory streaming still works.
+            self._log = None
+
+    def _write_log(self, obj):
+        if not self._log:
+            return
+        try:
+            self._log.write(json.dumps(obj) + "\n")
+            self._log.flush()
+        except Exception:
+            pass
 
     def append(self, event, data):
         with self.cond:
+            self._write_log(
+                {"kind": "frame", "i": len(self.frames), "event": event, "data": data}
+            )
             self.frames.append((event, data))
             self.cond.notify_all()
 
@@ -228,7 +270,90 @@ class Run:
                 self.status = status
             self.done = True
             self.finished_at = time.time()
+            self._write_log(
+                {"kind": "end", "status": self.status, "finishedAt": self.finished_at}
+            )
+            if self._log:
+                try:
+                    self._log.close()
+                except Exception:
+                    pass
+                self._log = None
             self.cond.notify_all()
+
+    @classmethod
+    def load(cls, path):
+        """Rebuild a run from its transcript file (no live process attached)."""
+        meta = None
+        frames = []
+        ended = False
+        status = "done"
+        finished_at = None
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    kind = obj.get("kind")
+                    if kind == "meta":
+                        meta = obj
+                    elif kind == "frame":
+                        frames.append((obj.get("event"), obj.get("data")))
+                    elif kind == "end":
+                        ended = True
+                        status = obj.get("status", "done")
+                        finished_at = obj.get("finishedAt")
+        except Exception:
+            return None
+        if not meta:
+            return None
+
+        run = cls.__new__(cls)  # bypass __init__ so we don't reopen the log
+        run.id = meta.get("runId") or os.path.splitext(os.path.basename(path))[0]
+        run.prompt = meta.get("prompt", "")
+        run.cwd = meta.get("cwd", "")
+        run.command = meta.get("command", [])
+        run.conversation_id = meta.get("conversationId", "")
+        run.frames = frames
+        run.cond = threading.Condition()
+        run.proc = None
+        run.started_at = meta.get("startedAt", time.time())
+        run._log = None
+
+        if ended:
+            run.done = True
+            run.status = status
+            run.finished_at = finished_at or run.started_at
+        else:
+            # The bridge stopped while this run was in flight - the live process
+            # is gone, so mark it interrupted but still let the client replay
+            # whatever it managed to produce.
+            run.frames.append(
+                (
+                    "error",
+                    {
+                        "type": "error",
+                        "message": "The bridge restarted while this run was in "
+                        "progress, so it was interrupted before finishing.",
+                    },
+                )
+            )
+            run.frames.append(("done", {"type": "done", "runId": run.id, "exitCode": -1}))
+            run.done = True
+            run.status = "interrupted"
+            run.finished_at = run.started_at
+        return run
+
+    def delete_file(self):
+        try:
+            os.remove(self.path())
+        except OSError:
+            pass
 
     def title(self):
         line = " ".join((self.prompt or "").split())
@@ -362,8 +487,8 @@ def run_worker(run, payload):
 
 
 def reap_runs():
-    """Drop finished runs once they are older than the retention window."""
-    retention = float(CONFIG.get("run_retention_seconds", 3600))
+    """Drop finished runs, in memory and on disk, past the retention window."""
+    retention = float(CONFIG.get("run_retention_seconds", 21600))
     while True:
         time.sleep(60)
         cutoff = time.time() - retention
@@ -371,7 +496,39 @@ def reap_runs():
             for run_id in list(RUNS):
                 run = RUNS[run_id]
                 if run.done and run.finished_at and run.finished_at < cutoff:
+                    run.delete_file()
                     del RUNS[run_id]
+
+
+def load_persisted_runs():
+    """On startup, bring back runs whose transcripts are still on disk.
+
+    This is what makes a run survive a bridge restart: the browser reconnects
+    with the same runId and replays the saved result.
+    """
+    if not os.path.isdir(RUNS_DIR):
+        return
+    retention = float(CONFIG.get("run_retention_seconds", 21600))
+    cutoff = time.time() - retention
+    loaded = 0
+    for name in sorted(os.listdir(RUNS_DIR)):
+        if not name.endswith(".jsonl"):
+            continue
+        path = os.path.join(RUNS_DIR, name)
+        run = Run.load(path)
+        if not run:
+            continue
+        if run.finished_at and run.finished_at < cutoff:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        with RUNS_LOCK:
+            RUNS[run.id] = run
+        loaded += 1
+    if loaded:
+        print("  restored %d past run(s) from %s" % (loaded, RUNS_DIR))
 
 
 class Bridge(BaseHTTPRequestHandler):
@@ -614,8 +771,9 @@ def main():
     print("  claude binary  %s" % (CLAUDE_BIN or "NOT FOUND - set claude_path in config.json"))
     print("  working dir    %s" % os.path.abspath(CONFIG["default_cwd"]))
     print("  permissions    %s" % CONFIG["default_permission_mode"])
-    print("  runs kept for  %ss after finishing (background reconnect window)"
-          % CONFIG.get("run_retention_seconds", 3600))
+    print("  runs kept for  %ss after finishing (survives a bridge restart)"
+          % CONFIG.get("run_retention_seconds", 21600))
+    load_persisted_runs()
     print("")
     print("  access token   %s" % CONFIG["token"])
     print("  (paste this into the web UI's Settings panel)")

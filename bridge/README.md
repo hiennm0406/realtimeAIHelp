@@ -126,17 +126,34 @@ So:
 | `allowed_origins` | `["*"]` | CORS. Narrow this to your site's URL once deployed. |
 | `max_concurrent` | `2` | Simultaneous Claude runs. |
 | `run_timeout_seconds` | `1800` | Hard stop for one run. |
-| `run_retention_seconds` | `3600` | How long a finished run stays reconnectable after it ends. Raise it to step away for longer. |
+| `run_retention_seconds` | `21600` | How long a finished run stays reconnectable (in memory and on disk). Raise it to step away for longer. |
 
 ## Background runs
 
 A run is driven by a background worker that is independent of the browser
-connection. Its events are buffered in memory, so closing the tab, losing signal,
-or walking away does **not** stop the agent — it keeps working. When you come
-back the UI reconnects with `GET /api/stream?runId=…`, replays everything it
-missed, and tails the run to the end. Finished runs remain reconnectable for
-`run_retention_seconds`; after that the bridge drops them and reconnecting
-returns `404`. `POST /api/abort` is the only thing that actually stops a run.
+connection. Its events are buffered in memory **and streamed to disk** at
+`bridge/runs/<runId>.jsonl`, so closing the tab, losing signal, walking away —
+or even restarting the bridge — does **not** stop or lose the agent's work. When
+you come back the UI reconnects with `GET /api/stream?runId=…`, replays
+everything it missed, and tails the run to the end.
+
+- **Close the browser / lose signal:** the worker keeps going; reconnect replays
+  the live progress and the final answer.
+- **Restart the bridge:** on startup it reloads every saved run from
+  `bridge/runs/`, so a returning browser still gets the result. A run that was
+  mid-flight when the bridge stopped is marked *interrupted* (its live process is
+  gone) but whatever it produced is still replayed.
+
+Finished runs stay reconnectable for `run_retention_seconds`; after that the
+bridge drops them and deletes the transcript, and reconnecting returns `404`.
+`POST /api/abort` is the only thing that actually stops a running agent.
+
+> **Important:** the bridge runs on *your* machine, not on the web host.
+> Deploying the site does **not** update it — after pulling new code you must
+> restart `python bridge/server.py` for these changes to take effect.
+
+> Transcripts under `bridge/runs/` can contain command output and secrets. They
+> are git-ignored; delete the folder to wipe saved runs.
 
 ## HTTP API
 

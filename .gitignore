@@ -29,6 +29,8 @@ dist-ssr
 # Claude Code bridge - contains the access token
 bridge/config.json
 bridge/__pycache__/
+# Saved run transcripts (may contain command output / secrets)
+bridge/runs/
 
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json
