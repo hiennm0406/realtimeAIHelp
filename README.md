@@ -1,0 +1,79 @@
+# realtimeAIHelp
+
+Claude Code, usable from any device. A Vue site you deploy to a host, plus a small
+Python bridge that runs on the machine where Claude Code is installed. The site
+sends your message to that machine, Claude Code does the work there with its full
+toolset, and the transcript streams back — thinking, tool calls, tool output,
+token usage and cost, the same information the terminal shows.
+
+```
+phone / laptop ──▶ Netlify (this Vue app)
+                        │  HTTPS + Bearer token
+                        ▼
+                   tunnel URL  ──▶  bridge/server.py  ──▶  claude.exe
+                                    (your PC)               your files, shell, web search
+```
+
+The site is static, so it never holds your credentials. Nothing runs in the cloud
+except the page itself.
+
+## Quick start
+
+**1. Start the bridge** on the machine with Claude Code:
+
+```
+python bridge/server.py
+```
+
+Copy the access token it prints. Full details in [`bridge/README.md`](bridge/README.md).
+
+**2. Expose it** so other devices can reach it:
+
+```
+cloudflared tunnel --url http://127.0.0.1:8787
+```
+
+**3. Run or deploy the site.**
+
+```
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # -> dist/
+```
+
+Requires Node 22+ (see `.nvmrc`). For Netlify, connect the repo — `netlify.toml`
+already sets the build command and publish directory. `public/_redirects` handles
+SPA routing.
+
+**4. Open the site → Settings**, paste the tunnel URL and token, hit
+**Test connection**.
+
+## What the chat shows
+
+| | |
+| --- | --- |
+| **Thinking** | Collapsed by default, expands to the reasoning. Empty when the model returns no reasoning text. |
+| **Tool calls** | Name plus a one-line preview; expand for full JSON input and output. Colour-coded running / ok / error. |
+| **Usage** | Per turn: input (fresh + cached), output, thinking tokens, web searches, cost, wall time. Running total in the header. |
+| **Session** | Follow-ups resume the same Claude Code session, so it keeps its context. **New** starts a fresh one. |
+
+Settings let you pick the model, effort level, and permission mode per device, and
+hide thinking or tool I/O if you want a plainer transcript.
+
+## Security
+
+The bridge defaults to `bypassPermissions`, which is what makes the web chat as
+capable as the terminal. **Anyone with the token can run any command on your
+machine.** Keep the token private, stop the tunnel when you're done, and read the
+security section in [`bridge/README.md`](bridge/README.md) before exposing it.
+
+## Layout
+
+```
+bridge/            Python bridge (stdlib only) + its docs
+src/lib/           bridge client, SSE parsing, stream-json -> timeline, markdown
+src/components/chat/   chat UI
+src/components/items/  AutoBattleFantasy item database (kept from the old project)
+```
+
+The item database still lives at `/items` and `/itemdetail`.
