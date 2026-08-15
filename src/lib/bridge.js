@@ -8,8 +8,16 @@
 
 const STORAGE_KEY = 'claude-bridge-settings'
 
+// Where the bridge lives, prefilled into Settings on a device that has never
+// been configured. A quick tunnel hands out a NEW hostname every time
+// cloudflared restarts, so when that happens this value goes stale: set
+// VITE_BRIDGE_URL at build time (Netlify: Site settings -> Environment
+// variables) to change it without touching code, or use a named tunnel to get
+// a hostname that never moves.
+const FALLBACK_BRIDGE_URL = 'https://compute-separate-point-stages.trycloudflare.com'
+
 export const DEFAULT_SETTINGS = {
-  url: 'http://127.0.0.1:8787',
+  url: import.meta.env.VITE_BRIDGE_URL || FALLBACK_BRIDGE_URL,
   token: '',
   model: '',
   effort: '',

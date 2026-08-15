@@ -48,6 +48,24 @@ SPA routing.
 **4. Open the site → Settings**, paste the tunnel URL and token, hit
 **Test connection**.
 
+### Changing the prefilled bridge URL
+
+Settings starts with a bridge URL already filled in, so a new device only needs
+the token. It is baked in at build time, and a quick tunnel changes hostname on
+every restart — when that happens, set `VITE_BRIDGE_URL` instead of editing the
+source:
+
+```
+VITE_BRIDGE_URL=https://your-tunnel.trycloudflare.com npm run build
+```
+
+On Netlify: **Site settings → Environment variables**, add `VITE_BRIDGE_URL`,
+redeploy. With no variable set it falls back to the value in `src/lib/bridge.js`.
+
+The prefill only applies to devices that have never saved settings — the browser
+remembers whatever you last typed, so on a device you already configured you
+have to edit the field by hand.
+
 ## What the chat shows
 
 | | |
