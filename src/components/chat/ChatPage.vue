@@ -1,5 +1,11 @@
 <template>
   <div class="workspace" :class="{ 'workspace--collapsed': !sidebarOpen }">
+    <div
+      v-if="sidebarOpen"
+      class="sidebar__scrim"
+      @click="toggleSidebar"
+    ></div>
+
     <aside v-if="sidebarOpen" class="sidebar card">
       <div class="sidebar__head">
         <b>Chats<span v-if="history.length"> · {{ history.length }}</span></b>
@@ -173,6 +179,7 @@
         :disabled="!configured"
         @keydown="onKeydown"
         @input="autosize"
+        @focus="onInputFocus"
       ></textarea>
 
       <button
@@ -227,6 +234,8 @@ const STATUS_LABELS = {
   responding: 'Responding…',
 }
 
+const isMobile = () => window.matchMedia('(max-width: 640px)').matches
+
 export default {
   components: { ResultCard, SettingsDrawer, ThinkingBlock, ToolBlock },
   data() {
@@ -240,7 +249,11 @@ export default {
       runId: '',
       controller: null,
       showSettings: false,
-      sidebarOpen: localStorage.getItem('sidebarOpen') !== '0',
+      // On phones the history panel is an overlay, so start it closed to keep
+      // the chat in full view; on desktop honor the saved preference.
+      sidebarOpen: isMobile()
+        ? false
+        : localStorage.getItem('sidebarOpen') !== '0',
     }
   },
   computed: {
@@ -283,7 +296,11 @@ export default {
 
     toggleSidebar() {
       this.sidebarOpen = !this.sidebarOpen
-      localStorage.setItem('sidebarOpen', this.sidebarOpen ? '1' : '0')
+      // Only remember the choice on desktop; the mobile overlay always
+      // reopens closed so the chat stays in view.
+      if (!isMobile()) {
+        localStorage.setItem('sidebarOpen', this.sidebarOpen ? '1' : '0')
+      }
     },
 
     persist() {
@@ -295,6 +312,7 @@ export default {
       if (this.running) return
       this.conversationId = newConversationId()
       Object.assign(this.convo, createConversation())
+      if (isMobile()) this.sidebarOpen = false
       this.scrollToEnd()
     },
 
@@ -309,6 +327,7 @@ export default {
       }
       this.conversationId = id
       Object.assign(this.convo, restoreConversation(body))
+      if (isMobile()) this.sidebarOpen = false
       this.scrollToEnd()
     },
 
@@ -341,6 +360,12 @@ export default {
       if (!el) return
       el.style.height = 'auto'
       el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+    },
+
+    onInputFocus() {
+      // The mobile keyboard shrinks the viewport a beat after focus; wait for
+      // it to settle, then bring the latest messages back into view above it.
+      setTimeout(() => this.scrollToEnd(), 350)
     },
 
     scrollToEnd() {
@@ -450,6 +475,11 @@ export default {
   display: flex;
   gap: 12px;
   height: calc(100vh - 44px);
+  height: calc(var(--app-vh, 100vh) - 44px);
+}
+
+.sidebar__scrim {
+  display: none;
 }
 
 .sidebar {
@@ -796,17 +826,59 @@ export default {
 }
 
 @media (max-width: 640px) {
+  /* Dedicated mobile layout: the chat owns the full width and height of the
+     visible viewport, and the history panel slides in as an overlay. */
   .workspace {
-    height: calc(100vh - 76px);
+    height: 100%;
+    gap: 0;
+    position: relative;
   }
 
-  .sidebar {
-    width: 132px;
-    padding: 10px;
+  .chat {
+    gap: 8px;
+    height: 100%;
+  }
+
+  .chat__bar {
+    padding: 8px 10px;
+  }
+
+  .chat__brand {
+    font-size: 14px;
+  }
+
+  .chat__log {
+    padding: 4px 0;
   }
 
   .bubble {
     max-width: 92%;
+  }
+
+  /* History becomes a slide-in drawer over the chat instead of a fixed column
+     that steals horizontal space. */
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    width: min(84%, 300px);
+    padding: 12px;
+    border-radius: 0 14px 14px 0;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  }
+
+  .sidebar__scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(2, 6, 12, 0.5);
+  }
+
+  .chat__composer {
+    padding: 8px;
   }
 }
 </style>
