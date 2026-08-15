@@ -26,7 +26,40 @@ export function createConversation() {
     status: '',
     liveUsage: null,
     rateLimit: null,
+    // How full the model's context window is, from the last completed turn.
+    context: null,
     totals: { cost: 0, turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  }
+}
+
+/**
+ * Context pressure for the turn that just finished.
+ *
+ * Everything the model had to read this turn - fresh input plus whatever was
+ * served from or written to the prompt cache - is the prompt, and the prompt is
+ * what fills the context window. Claude Code reports the window size per model
+ * in `modelUsage`, so the remaining share is derivable rather than guessed.
+ */
+function readContext(data) {
+  const models = data.modelUsage
+  if (!models || typeof models !== 'object') return null
+
+  const entry = models[data.model] || Object.values(models)[0]
+  const window = Number(entry?.contextWindow || 0)
+  if (!window) return null
+
+  const usage = data.usage || {}
+  const used =
+    Number(usage.input_tokens || 0) +
+    Number(usage.cache_read_input_tokens || 0) +
+    Number(usage.cache_creation_input_tokens || 0)
+
+  const remaining = Math.max(0, window - used)
+  return {
+    window,
+    used,
+    remaining,
+    percentLeft: Math.max(0, Math.min(100, (remaining / window) * 100)),
   }
 }
 
@@ -36,6 +69,29 @@ export function createConversation() {
  * is what schedules a re-render - mutating the raw object we passed in would
  * update the data silently and never repaint.
  */
+/**
+ * Rebuilds a conversation saved by lib/history.
+ *
+ * `blocks` and `tools` are intentionally left empty: they key off message IDs
+ * from a live run, and any further turn on this conversation produces fresh
+ * ones. `seq` is carried over so newly appended items cannot collide with the
+ * restored ones' ids.
+ */
+export function restoreConversation(body) {
+  const convo = createConversation()
+  if (!body) return convo
+
+  convo.timeline = Array.isArray(body.timeline) ? body.timeline : []
+  convo.sessionId = body.sessionId || ''
+  convo.model = body.model || ''
+  convo.cwd = body.cwd || ''
+  convo.permissionMode = body.permissionMode || ''
+  convo.context = body.context || null
+  if (body.totals) Object.assign(convo.totals, body.totals)
+  convo.seq = Number(body.seq) || convo.timeline.length
+  return convo
+}
+
 function push(convo, item) {
   convo.seq += 1
   item.id = `i${convo.seq}`
@@ -191,8 +247,12 @@ function applyResult(convo, data) {
   convo.totals.cost += Number(data.total_cost_usd || 0)
   convo.totals.turns += Number(data.num_turns || 0)
 
+  const context = readContext(data)
+  if (context) convo.context = context
+
   push(convo, {
     kind: 'result',
+    context,
     isError: Boolean(data.is_error),
     subtype: data.subtype || '',
     text: data.is_error ? data.result || 'Run failed.' : '',

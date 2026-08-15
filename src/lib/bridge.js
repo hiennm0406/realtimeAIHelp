@@ -16,8 +16,10 @@ const STORAGE_KEY = 'claude-bridge-settings'
 // a hostname that never moves.
 const FALLBACK_BRIDGE_URL = 'https://compute-separate-point-stages.trycloudflare.com'
 
+// Optional chaining because `import.meta.env` only exists under Vite; this
+// module is also loaded directly by the test harness.
 export const DEFAULT_SETTINGS = {
-  url: import.meta.env.VITE_BRIDGE_URL || FALLBACK_BRIDGE_URL,
+  url: import.meta.env?.VITE_BRIDGE_URL || FALLBACK_BRIDGE_URL,
   token: '',
   model: '',
   effort: '',

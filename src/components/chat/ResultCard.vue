@@ -9,6 +9,13 @@
       </span>
     </div>
 
+    <div v-if="item.context" class="ctx" :class="ctxClass" :title="ctxTitle">
+      <div class="ctx__bar">
+        <div class="ctx__fill" :style="{ width: `${100 - item.context.percentLeft}%` }"></div>
+      </div>
+      <span class="ctx__label">{{ ctxLabel }}</span>
+    </div>
+
     <p v-if="item.permissionDenials && item.permissionDenials.length" class="res__denials">
       {{ item.permissionDenials.length }} tool call(s) were denied by the permission mode.
     </p>
@@ -82,6 +89,19 @@ export default {
 
       return list
     },
+    ctxLabel() {
+      return `${this.item.context.percentLeft.toFixed(0)}% context left`
+    },
+    ctxTitle() {
+      const c = this.item.context
+      return `${formatTokens(c.used)} of ${formatTokens(c.window)} tokens used by the prompt this turn (fresh + cached). Claude Code compacts the conversation automatically before the window runs out.`
+    },
+    ctxClass() {
+      const left = this.item.context.percentLeft
+      if (left <= 15) return 'ctx--bad'
+      if (left <= 35) return 'ctx--warn'
+      return ''
+    },
   },
 }
 </script>
@@ -121,5 +141,44 @@ export default {
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--warn);
+}
+
+.ctx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  --ctx-color: var(--good);
+}
+
+.ctx--warn {
+  --ctx-color: var(--warn);
+}
+
+.ctx--bad {
+  --ctx-color: var(--bad);
+}
+
+.ctx__bar {
+  flex: 1;
+  max-width: 220px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ctx__fill {
+  height: 100%;
+  background: var(--ctx-color);
+  transition: width 0.3s ease;
+}
+
+.ctx__label {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 </style>

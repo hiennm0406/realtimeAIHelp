@@ -11,10 +11,21 @@
       </div>
 
       <div class="chat__bartools">
+        <span
+          v-if="convo.context"
+          class="chat__ctx"
+          :class="ctxClass"
+          :title="`${formatTokens(convo.context.used)} of ${formatTokens(convo.context.window)} context tokens used`"
+        >
+          {{ convo.context.percentLeft.toFixed(0) }}% context
+        </span>
         <span v-if="convo.totals.cost" class="chat__total" title="Total cost this conversation">
           {{ formatCost(convo.totals.cost) }}
         </span>
-        <button class="btn" type="button" :disabled="running" @click="newConversation">
+        <button class="btn" type="button" @click="showHistory = !showHistory">
+          Chats<span v-if="history.length"> ({{ history.length }})</span>
+        </button>
+        <button class="btn" type="button" :disabled="running" @click="startNewChat">
           New
         </button>
         <button class="btn" type="button" @click="showSettings = !showSettings">
@@ -22,6 +33,45 @@
         </button>
       </div>
     </header>
+
+    <div v-if="showHistory" class="hist card">
+      <div class="hist__head">
+        <b>Chat history</b>
+        <button class="btn" type="button" @click="showHistory = false">Close</button>
+      </div>
+
+      <p v-if="!history.length" class="hist__empty">
+        No saved chats yet. Conversations are stored in this browser once you send a
+        message.
+      </p>
+
+      <ul v-else class="hist__list">
+        <li
+          v-for="entry in history"
+          :key="entry.id"
+          class="hist__item"
+          :class="{ 'hist__item--active': entry.id === conversationId }"
+        >
+          <button class="hist__open" type="button" :disabled="running" @click="openChat(entry.id)">
+            <span class="hist__title">{{ entry.title }}</span>
+            <span class="hist__meta">
+              {{ entry.messages }} msg
+              <template v-if="entry.cost"> · {{ formatCost(entry.cost) }}</template>
+              <template v-if="entry.model"> · {{ entry.model }}</template>
+              · {{ formatWhen(entry.updatedAt) }}
+            </span>
+          </button>
+          <button
+            class="hist__del"
+            type="button"
+            title="Delete this chat"
+            @click="removeChat(entry.id)"
+          >
+            ✕
+          </button>
+        </li>
+      </ul>
+    </div>
 
     <SettingsDrawer
       v-if="showSettings"
@@ -127,8 +177,16 @@ import {
   addUserMessage,
   applyClaudeEvent,
   createConversation,
+  restoreConversation,
 } from '../../lib/conversation.js'
-import { formatCost } from '../../lib/format.js'
+import {
+  deleteConversation,
+  listConversations,
+  loadConversation,
+  newConversationId,
+  saveConversation,
+} from '../../lib/history.js'
+import { formatCost, formatTokens } from '../../lib/format.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 
 const STATUS_LABELS = {
@@ -144,11 +202,14 @@ export default {
     return {
       settings: reactive(loadSettings()),
       convo: reactive(createConversation()),
+      conversationId: newConversationId(),
+      history: [],
       draft: '',
       running: false,
       runId: '',
       controller: null,
       showSettings: false,
+      showHistory: false,
     }
   },
   computed: {
@@ -158,15 +219,26 @@ export default {
     statusLabel() {
       return STATUS_LABELS[this.convo.status] || 'Working…'
     },
+    ctxClass() {
+      const left = this.convo.context?.percentLeft ?? 100
+      if (left <= 15) return 'chat__ctx--bad'
+      if (left <= 35) return 'chat__ctx--warn'
+      return ''
+    },
   },
   mounted() {
     if (!this.configured) this.showSettings = true
+    this.refreshHistory()
+    // Reopen the most recent chat so a reload doesn't look like data loss.
+    const latest = this.history[0]
+    if (latest) this.openChat(latest.id)
   },
   beforeUnmount() {
     this.controller?.abort()
   },
   methods: {
     formatCost,
+    formatTokens,
     renderMarkdown,
 
     applySettings(next) {
@@ -174,8 +246,56 @@ export default {
       saveSettings({ ...this.settings })
     },
 
-    newConversation() {
+    refreshHistory() {
+      this.history = listConversations()
+    },
+
+    persist() {
+      saveConversation(this.conversationId, this.convo)
+      this.refreshHistory()
+    },
+
+    startNewChat() {
+      if (this.running) return
+      this.conversationId = newConversationId()
       Object.assign(this.convo, createConversation())
+      this.showHistory = false
+      this.scrollToEnd()
+    },
+
+    openChat(id) {
+      if (this.running || id === this.conversationId) {
+        this.showHistory = false
+        return
+      }
+      const body = loadConversation(id)
+      if (!body) {
+        // Index entry without a body: the body was evicted for space.
+        deleteConversation(id)
+        this.refreshHistory()
+        return
+      }
+      this.conversationId = id
+      Object.assign(this.convo, restoreConversation(body))
+      this.showHistory = false
+      this.scrollToEnd()
+    },
+
+    removeChat(id) {
+      deleteConversation(id)
+      this.refreshHistory()
+      if (id === this.conversationId) this.startNewChat()
+    },
+
+    formatWhen(ts) {
+      if (!ts) return ''
+      const diff = Date.now() - ts
+      if (diff < 60_000) return 'just now'
+      if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+      if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+      const days = Math.floor(diff / 86_400_000)
+      if (days < 7) return `${days}d ago`
+      return new Date(ts).toLocaleDateString()
     },
 
     onKeydown(event) {
@@ -212,6 +332,8 @@ export default {
       this.draft = ''
       this.$nextTick(this.autosize)
       this.scrollToEnd()
+      // Save immediately so the chat appears in history even if the run fails.
+      this.persist()
 
       this.running = true
       this.convo.status = 'starting'
@@ -278,6 +400,7 @@ export default {
         this.runId = ''
         this.controller = null
         this.convo.status = ''
+        this.persist()
         nudge()
       }
     },
@@ -331,6 +454,123 @@ export default {
   font-size: 12.5px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.chat__ctx {
+  font-size: 11.5px;
+  color: var(--good);
+  border: 1px solid color-mix(in srgb, var(--good) 40%, var(--border));
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat__ctx--warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
+
+.chat__ctx--bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
+}
+
+.hist {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.hist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.hist__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.hist__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hist__item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.hist__item:hover {
+  border-color: var(--border);
+  background: var(--panel-2);
+}
+
+.hist__item--active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.hist__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hist__open:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hist__title {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist__meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.hist__del {
+  flex: none;
+  padding: 0 10px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.hist__del:hover {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 
 .chat__setup {
