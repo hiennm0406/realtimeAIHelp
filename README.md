@@ -76,6 +76,7 @@ have to edit the field by hand.
 | **Context** | How much of the model's context window the prompt is using, per turn and in the header. Derived from `modelUsage.contextWindow` and the turn's prompt tokens. Turns amber under 35% left, red under 15%. |
 | **History** | **Chats** lists past conversations; click one to reopen it and keep talking on the same Claude Code session. Stored in the browser, so it is per-device and never leaves it. |
 | **Session** | Follow-ups resume the same Claude Code session, so it keeps its context. **New** starts a fresh one. |
+| **Background** | Runs live on the bridge, not in the tab. Close the page or lose signal and the agent keeps working; reopen the chat (or switch back to the tab) and it reconnects, replays what you missed, and shows the finished answer. Runs stay reconnectable for a retention window (`run_retention_seconds`, default 1h). **Stop** is the only thing that ends a run early. |
 
 Settings let you pick the model, effort level, and permission mode per device, and
 hide thinking or tool I/O if you want a plainer transcript.

@@ -100,6 +100,9 @@
           <span v-if="convo.totals.cost" class="chat__total" title="Total cost this conversation">
             {{ formatCost(convo.totals.cost) }}
           </span>
+          <button class="btn" type="button" @click="showRules = !showRules">
+            Rule
+          </button>
           <button class="btn" type="button" @click="showSettings = !showSettings">
             Settings
           </button>
@@ -111,6 +114,12 @@
       :settings="settings"
       @close="showSettings = false"
       @update="applySettings"
+    />
+
+    <RulesDrawer
+      v-if="showRules"
+      :settings="settings"
+      @close="showRules = false"
     />
 
     <div v-if="!configured" class="chat__setup card">
@@ -206,10 +215,20 @@
 <script>
 import { reactive } from 'vue'
 import ResultCard from './ResultCard.vue'
+import RulesDrawer from './RulesDrawer.vue'
 import SettingsDrawer from './SettingsDrawer.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolBlock from './ToolBlock.vue'
-import { abortRun, loadSettings, saveSettings, streamChat } from '../../lib/bridge.js'
+import {
+  abortRun,
+  clearActiveRun,
+  getActiveRun,
+  loadSettings,
+  resumeChat,
+  saveSettings,
+  setActiveRun,
+  streamChat,
+} from '../../lib/bridge.js'
 import {
   addLocalError,
   addUserMessage,
@@ -229,6 +248,7 @@ import { renderMarkdown } from '../../lib/markdown.js'
 
 const STATUS_LABELS = {
   starting: 'Starting…',
+  reconnecting: 'Reconnecting to the background run…',
   requesting: 'Contacting the API…',
   thinking: 'Thinking…',
   responding: 'Responding…',
@@ -237,7 +257,7 @@ const STATUS_LABELS = {
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 
 export default {
-  components: { ResultCard, SettingsDrawer, ThinkingBlock, ToolBlock },
+  components: { ResultCard, RulesDrawer, SettingsDrawer, ThinkingBlock, ToolBlock },
   data() {
     return {
       settings: reactive(loadSettings()),
@@ -249,6 +269,7 @@ export default {
       runId: '',
       controller: null,
       showSettings: false,
+      showRules: false,
       // On phones the history panel is an overlay, so start it closed to keep
       // the chat in full view; on desktop honor the saved preference.
       sidebarOpen: isMobile()
@@ -276,9 +297,18 @@ export default {
     // Reopen the most recent chat so a reload doesn't look like data loss.
     const latest = this.history[0]
     if (latest) this.openChat(latest.id)
+    // Coming back to a backgrounded tab: if the run we left behind kept working
+    // on the bridge, pick its progress back up without a reload.
+    this.onVisible = () => {
+      if (document.visibilityState === 'visible') this.maybeResume()
+    }
+    document.addEventListener('visibilitychange', this.onVisible)
   },
   beforeUnmount() {
+    // Abort only the local reader. The run keeps going on the bridge so we can
+    // reconnect to it when the user returns.
     this.controller?.abort()
+    if (this.onVisible) document.removeEventListener('visibilitychange', this.onVisible)
   },
   methods: {
     formatCost,
@@ -329,6 +359,8 @@ export default {
       Object.assign(this.convo, restoreConversation(body))
       if (isMobile()) this.sidebarOpen = false
       this.scrollToEnd()
+      // If this chat has a run still working in the background, reconnect to it.
+      this.maybeResume()
     },
 
     removeChat(id) {
@@ -376,7 +408,9 @@ export default {
     },
 
     async stop() {
+      // Explicit stop really does kill the run, so drop its background marker.
       await abortRun(this.settings, this.runId)
+      clearActiveRun(this.conversationId)
       this.controller?.abort()
     },
 
@@ -384,6 +418,36 @@ export default {
       if (this.running || !this.configured) return
       this.draft = text
       this.send()
+    },
+
+    /**
+     * Reconnect to a run this conversation left working in the background.
+     * Truncates back to where the run started and replays it from the bridge, so
+     * the in-progress turn rebuilds exactly, however far it has got.
+     */
+    maybeResume() {
+      if (!this.configured || this.running) return
+      const active = getActiveRun(this.conversationId)
+      if (!active?.runId) return
+
+      const anchor = Number.isFinite(active.anchor) ? active.anchor : this.convo.timeline.length
+      if (anchor >= 0 && anchor < this.convo.timeline.length) {
+        this.convo.timeline.splice(anchor)
+      }
+      // Blocks and tools key off a live run's message ids; clear them so the
+      // replay rebuilds instead of merging into stale entries.
+      this.convo.blocks = {}
+      this.convo.tools = {}
+      this.convo.currentMessageId = ''
+
+      this.runId = active.runId
+      this.convo.status = 'reconnecting'
+      this.runStream({
+        isResume: true,
+        anchor,
+        start: ({ signal, handlers }) =>
+          resumeChat({ settings: this.settings, runId: active.runId, offset: 0, handlers, signal }),
+      })
     },
 
     async send() {
@@ -397,8 +461,34 @@ export default {
       // Save immediately so the chat appears in history even if the run fails.
       this.persist()
 
-      this.running = true
+      // Where the answer begins - what a reconnect truncates back to before it
+      // replays this run.
+      const anchor = this.convo.timeline.length
+      const sessionId = this.convo.sessionId
+      const conversationId = this.conversationId
+
       this.convo.status = 'starting'
+      await this.runStream({
+        anchor,
+        start: ({ signal, handlers }) =>
+          streamChat({
+            settings: this.settings,
+            prompt,
+            sessionId,
+            conversationId,
+            handlers,
+            signal,
+          }),
+      })
+    },
+
+    /**
+     * Shared machinery for both a fresh run and a reconnect: wire the stream's
+     * events into the timeline, keep the view pinned to the bottom, and record
+     * or clear the background-run marker as the run starts and finishes.
+     */
+    async runStream({ start, anchor = 0, isResume = false }) {
+      this.running = true
       this.controller = new AbortController()
 
       // Only auto-scroll while the user is already near the bottom, so reading
@@ -417,14 +507,15 @@ export default {
       }
 
       try {
-        await streamChat({
-          settings: this.settings,
-          prompt,
-          sessionId: this.convo.sessionId,
+        await start({
           signal: this.controller.signal,
           handlers: {
             onBridge: (data) => {
-              if (data.type === 'started') this.runId = data.runId
+              if (data.type === 'started') {
+                this.runId = data.runId
+                // Remember the run so a return trip can reconnect to it.
+                setActiveRun(this.conversationId, data.runId, anchor)
+              }
             },
             onClaude: (data) => {
               applyClaudeEvent(this.convo, data)
@@ -443,13 +534,24 @@ export default {
               nudge()
             },
             onDone: () => {
+              // The run is finished on the bridge; nothing left to reconnect to.
               this.convo.status = ''
+              clearActiveRun(this.conversationId)
             },
           },
         })
       } catch (error) {
         if (error.name === 'AbortError') {
-          addLocalError(this.convo, 'Stopped.')
+          // Left mid-run: don't write an error, the run is still going in the
+          // background and can be picked back up.
+          if (!getActiveRun(this.conversationId)) addLocalError(this.convo, 'Stopped.')
+        } else if (isResume && error.status === 404) {
+          clearActiveRun(this.conversationId)
+          this.convo.timeline.push({
+            id: `n${Date.now()}${this.convo.timeline.length}`,
+            kind: 'notice',
+            text: 'The background run finished a while ago and its transcript is no longer available to replay.',
+          })
         } else {
           addLocalError(
             this.convo,

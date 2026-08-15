@@ -6,6 +6,12 @@ spawns `claude -p --output-format stream-json` and relays every JSON line to the
 browser as Server-Sent Events, so the web UI can render the same information the
 terminal shows: thinking, tool calls, tool results, token usage and cost.
 
+Each run lives in a background worker that is *independent of the browser
+connection*. Its events are buffered in memory, so a client can disconnect (close
+the tab, lose signal, walk away) and the agent keeps working. When the client
+comes back it reconnects with `GET /api/stream?runId=...`, replays everything it
+missed, and keeps tailing until the run finishes.
+
 Stdlib only - no pip install required.
 
     python bridge/server.py
@@ -25,6 +31,7 @@ import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(ROOT)
@@ -63,6 +70,10 @@ DEFAULT_CONFIG = {
     "max_concurrent": 2,
     # Hard stop for a single run, in seconds.
     "run_timeout_seconds": 1800,
+    # How long a finished run is kept in memory so a returning browser can still
+    # replay its result. After this, the run is dropped and reconnecting to it
+    # returns 404. Raise it if you want to be able to step away for longer.
+    "run_retention_seconds": 3600,
 }
 
 PERMISSION_MODES = {
@@ -96,7 +107,8 @@ def save_config(config):
 
 CONFIG = load_config()
 
-# runId -> Popen, so /api/abort can stop a run the browser no longer wants.
+# runId -> Run. A run outlives the browser connection that started it, so this is
+# also what /api/stream reattaches to and what the reaper eventually clears.
 RUNS = {}
 RUNS_LOCK = threading.Lock()
 RUN_SLOTS = threading.BoundedSemaphore(max(1, int(CONFIG["max_concurrent"])))
@@ -183,6 +195,185 @@ def build_command(payload):
     return cmd
 
 
+class Run:
+    """One Claude Code invocation, buffered so it can outlive any single client.
+
+    `frames` is an append-only list of (event, data) pairs - exactly the SSE
+    frames a client should receive. A frame's index in the list is its id, which
+    is how a reconnecting client asks for "everything after N".
+    """
+
+    def __init__(self, run_id, prompt, cwd, command, conversation_id=""):
+        self.id = run_id
+        self.prompt = prompt
+        self.cwd = cwd
+        self.command = command
+        self.conversation_id = conversation_id
+        self.frames = []
+        self.cond = threading.Condition()
+        self.done = False
+        self.status = "running"
+        self.proc = None
+        self.started_at = time.time()
+        self.finished_at = None
+
+    def append(self, event, data):
+        with self.cond:
+            self.frames.append((event, data))
+            self.cond.notify_all()
+
+    def finish(self, status=None):
+        with self.cond:
+            if status:
+                self.status = status
+            self.done = True
+            self.finished_at = time.time()
+            self.cond.notify_all()
+
+    def title(self):
+        line = " ".join((self.prompt or "").split())
+        return line[:120]
+
+    def summary(self):
+        return {
+            "runId": self.id,
+            "status": self.status,
+            "done": self.done,
+            "conversationId": self.conversation_id,
+            "startedAt": int(self.started_at * 1000),
+            "finishedAt": int(self.finished_at * 1000) if self.finished_at else None,
+            "frames": len(self.frames),
+            "prompt": self.title(),
+        }
+
+
+def run_worker(run, payload):
+    """Drives one Claude process to completion, writing every event into the run.
+
+    This runs on its own thread and never touches a client socket, so a browser
+    coming or going has no effect on it.
+    """
+    proc = None
+    try:
+        popen_kwargs = {
+            "cwd": run.cwd,
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "bufsize": 1,
+        }
+        if IS_WINDOWS:
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        cmd = [CLAUDE_BIN] + run.command
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+        run.proc = proc
+
+        run.append(
+            "bridge",
+            {
+                "type": "started",
+                "runId": run.id,
+                "cwd": run.cwd,
+                "command": " ".join(run.command),
+            },
+        )
+
+        # Hand the prompt over on stdin so long prompts and quotes survive.
+        try:
+            proc.stdin.write(run.prompt)
+            proc.stdin.close()
+        except Exception as exc:
+            run.append("error", {"type": "error", "message": "could not send prompt: %s" % exc})
+
+        lines = queue.Queue()
+        stderr_chunks = []
+
+        # readline() rather than `for line in proc.stdout`: iterating a pipe uses
+        # a read-ahead buffer, which holds lines back until the buffer fills.
+        def pump_stdout():
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    lines.put(("out", line))
+            except Exception:
+                pass
+            finally:
+                lines.put(("eof", None))
+
+        def pump_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    stderr_chunks.append(line)
+            except Exception:
+                pass
+
+        threading.Thread(target=pump_stdout, daemon=True).start()
+        threading.Thread(target=pump_stderr, daemon=True).start()
+
+        deadline = time.time() + float(CONFIG["run_timeout_seconds"])
+        timed_out = False
+
+        while True:
+            if time.time() > deadline:
+                run.append("error", {"type": "error", "message": "run timed out"})
+                kill_process_tree(proc)
+                timed_out = True
+                break
+            try:
+                # A short poll so the deadline is enforced even while Claude is
+                # silent (no output line to wake us).
+                kind, line = lines.get(timeout=5)
+            except queue.Empty:
+                continue
+
+            if kind == "eof":
+                break
+
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                run.append("notice", {"type": "notice", "text": line})
+                continue
+
+            run.append("claude", parsed)
+
+        exit_code = proc.wait()
+        stderr_text = "".join(stderr_chunks).strip()
+        if exit_code != 0 and stderr_text and not timed_out:
+            run.append("error", {"type": "error", "message": stderr_text[:4000]})
+        run.append("done", {"type": "done", "runId": run.id, "exitCode": exit_code})
+        run.finish(status="done" if exit_code == 0 else "error")
+
+    except Exception as exc:
+        run.append("error", {"type": "error", "message": str(exc)})
+        run.append("done", {"type": "done", "runId": run.id, "exitCode": -1})
+        run.finish(status="error")
+    finally:
+        if proc:
+            kill_process_tree(proc)
+        RUN_SLOTS.release()
+
+
+def reap_runs():
+    """Drop finished runs once they are older than the retention window."""
+    retention = float(CONFIG.get("run_retention_seconds", 3600))
+    while True:
+        time.sleep(60)
+        cutoff = time.time() - retention
+        with RUNS_LOCK:
+            for run_id in list(RUNS):
+                run = RUNS[run_id]
+                if run.done and run.finished_at and run.finished_at < cutoff:
+                    del RUNS[run_id]
+
+
 class Bridge(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "ClaudeBridge/1.0"
@@ -237,12 +428,14 @@ class Bridge(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = self.path.split("?", 1)[0]
+        parsed = urlparse(self.path)
+        path = parsed.path
+
         if path in ("/api/health", "/health"):
             if not self.authorized():
                 return self.send_json(401, {"error": "unauthorized"})
             with RUNS_LOCK:
-                active = len(RUNS)
+                active = sum(1 for r in RUNS.values() if not r.done)
             return self.send_json(
                 200,
                 {
@@ -259,10 +452,34 @@ class Bridge(BaseHTTPRequestHandler):
                     "maxConcurrent": CONFIG["max_concurrent"],
                 },
             )
+
+        if path == "/api/runs":
+            if not self.authorized():
+                return self.send_json(401, {"error": "unauthorized"})
+            with RUNS_LOCK:
+                runs = [run.summary() for run in RUNS.values()]
+            runs.sort(key=lambda r: r["startedAt"], reverse=True)
+            return self.send_json(200, {"runs": runs})
+
+        if path == "/api/stream":
+            if not self.authorized():
+                return self.send_json(401, {"error": "unauthorized"})
+            params = parse_qs(parsed.query)
+            run_id = (params.get("runId", [""])[0] or "").strip()
+            try:
+                offset = int(params.get("offset", ["0"])[0])
+            except ValueError:
+                offset = 0
+            with RUNS_LOCK:
+                run = RUNS.get(run_id)
+            if not run:
+                return self.send_json(404, {"error": "no such run"})
+            return self.stream_run(run, offset)
+
         return self.send_json(404, {"error": "not found"})
 
     def do_POST(self):
-        path = self.path.split("?", 1)[0]
+        path = urlparse(self.path).path
         if not self.authorized():
             return self.send_json(401, {"error": "unauthorized"})
 
@@ -273,10 +490,11 @@ class Bridge(BaseHTTPRequestHandler):
                 return self.send_json(400, {"error": "invalid json body"})
             run_id = payload.get("runId")
             with RUNS_LOCK:
-                proc = RUNS.get(run_id)
-            if not proc:
+                run = RUNS.get(run_id)
+            if not run:
                 return self.send_json(404, {"error": "no such run"})
-            kill_process_tree(proc)
+            if run.proc:
+                kill_process_tree(run.proc)
             return self.send_json(200, {"ok": True, "runId": run_id})
 
         if path == "/api/chat":
@@ -284,13 +502,13 @@ class Bridge(BaseHTTPRequestHandler):
                 payload = self.read_json_body()
             except Exception:
                 return self.send_json(400, {"error": "invalid json body"})
-            return self.stream_chat(payload)
+            return self.start_chat(payload)
 
         return self.send_json(404, {"error": "not found"})
 
-    # ---------- the streaming run ----------
+    # ---------- starting and streaming a run ----------
 
-    def stream_chat(self, payload):
+    def start_chat(self, payload):
         prompt = (payload.get("prompt") or "").strip()
         if not prompt:
             return self.send_json(400, {"error": "prompt is required"})
@@ -307,152 +525,78 @@ class Bridge(BaseHTTPRequestHandler):
             return self.send_json(429, {"error": "bridge is busy, try again shortly"})
 
         run_id = uuid.uuid4().hex
-        write_lock = threading.Lock()
-        proc = None
+        cwd = allowed_cwd(payload.get("cwd"))
+        command = build_command(payload)[1:]  # drop the binary; worker re-adds it
+        run = Run(
+            run_id,
+            prompt,
+            cwd,
+            command,
+            conversation_id=(payload.get("conversationId") or "").strip(),
+        )
+        with RUNS_LOCK:
+            RUNS[run_id] = run
 
-        def emit(event, data):
-            """Write one SSE frame. Returns False once the browser has gone away."""
-            frame = "event: %s\ndata: %s\n\n" % (event, json.dumps(data))
-            with write_lock:
-                try:
-                    self.wfile.write(frame.encode("utf-8"))
-                    self.wfile.flush()
-                    return True
-                except (BrokenPipeError, ConnectionResetError, OSError):
-                    return False
+        threading.Thread(target=run_worker, args=(run, payload), daemon=True).start()
 
-        try:
-            # The body has no Content-Length and isn't chunked, so under HTTP/1.1
-            # the only unambiguous framing is close-delimited. Tunnels and proxies
-            # mis-handle a keep-alive response with no length.
-            self.close_connection = True
+        # Stream this run to the caller from the very first frame. If they drop,
+        # stream_run just returns - the worker above keeps the run alive.
+        self.stream_run(run, 0)
 
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache, no-transform")
-            self.send_header("Connection", "close")
-            # Stops nginx / tunnel proxies from buffering the stream.
-            self.send_header("X-Accel-Buffering", "no")
-            self.send_cors()
-            self.end_headers()
+    def stream_run(self, run, offset):
+        # The body has no Content-Length and isn't chunked, so under HTTP/1.1 the
+        # only unambiguous framing is close-delimited. Tunnels and proxies
+        # mis-handle a keep-alive response with no length.
+        self.close_connection = True
 
-            cwd = allowed_cwd(payload.get("cwd"))
-            cmd = build_command(payload)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-transform")
+        self.send_header("Connection", "close")
+        # Stops nginx / tunnel proxies from buffering the stream.
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_cors()
+        self.end_headers()
 
-            popen_kwargs = {
-                "cwd": cwd,
-                "stdin": subprocess.PIPE,
-                "stdout": subprocess.PIPE,
-                "stderr": subprocess.PIPE,
-                "encoding": "utf-8",
-                "errors": "replace",
-                "bufsize": 1,
-            }
-            if IS_WINDOWS:
-                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-            else:
-                popen_kwargs["start_new_session"] = True
+        index = max(0, offset)
+        while True:
+            with run.cond:
+                while index >= len(run.frames) and not run.done:
+                    run.cond.wait(timeout=10)
+                pending = run.frames[index:]
+                index += len(pending)
+                drained = run.done and index >= len(run.frames)
 
-            proc = subprocess.Popen(cmd, **popen_kwargs)
-            with RUNS_LOCK:
-                RUNS[run_id] = proc
+            if pending:
+                base = index - len(pending)
+                for offset_in_batch, (event, data) in enumerate(pending):
+                    if not self.emit(base + offset_in_batch, event, data):
+                        return  # client gone; the worker carries on without us
+            elif not drained:
+                if not self.ping():
+                    return
 
-            emit(
-                "bridge",
-                {
-                    "type": "started",
-                    "runId": run_id,
-                    "cwd": cwd,
-                    "command": " ".join(cmd[1:]),
-                },
-            )
-
-            # Hand the prompt over on stdin so long prompts and quotes survive.
-            try:
-                proc.stdin.write(prompt)
-                proc.stdin.close()
-            except Exception as exc:
-                emit("error", {"type": "error", "message": "could not send prompt: %s" % exc})
-
-            lines = queue.Queue()
-            stderr_chunks = []
-
-            # readline() rather than `for line in proc.stdout`: iterating a pipe
-            # uses a read-ahead buffer, which holds lines back until the buffer
-            # fills. That turns a live stream into one late burst.
-            def pump_stdout():
-                try:
-                    for line in iter(proc.stdout.readline, ""):
-                        lines.put(("out", line))
-                except Exception:
-                    pass
-                finally:
-                    lines.put(("eof", None))
-
-            def pump_stderr():
-                try:
-                    for line in iter(proc.stderr.readline, ""):
-                        stderr_chunks.append(line)
-                except Exception:
-                    pass
-
-            threading.Thread(target=pump_stdout, daemon=True).start()
-            threading.Thread(target=pump_stderr, daemon=True).start()
-
-            deadline = time.time() + float(CONFIG["run_timeout_seconds"])
-            alive = True
-
-            while alive:
-                if time.time() > deadline:
-                    emit("error", {"type": "error", "message": "run timed out"})
-                    kill_process_tree(proc)
-                    break
-                try:
-                    kind, line = lines.get(timeout=10)
-                except queue.Empty:
-                    # Idle keepalive so tunnels don't drop a quiet connection.
-                    with write_lock:
-                        try:
-                            self.wfile.write(b": ping\n\n")
-                            self.wfile.flush()
-                        except (BrokenPipeError, ConnectionResetError, OSError):
-                            alive = False
-                    continue
-
-                if kind == "eof":
-                    break
-
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    parsed = json.loads(line)
-                except json.JSONDecodeError:
-                    # Anything Claude prints that isn't a JSON line.
-                    alive = emit("notice", {"type": "notice", "text": line})
-                    continue
-
-                alive = emit("claude", parsed)
-
-            if not alive:
-                # Browser disconnected mid-run: don't leave Claude running.
-                kill_process_tree(proc)
+            if drained:
                 return
 
-            exit_code = proc.wait()
-            stderr_text = "".join(stderr_chunks).strip()
-            if exit_code != 0 and stderr_text:
-                emit("error", {"type": "error", "message": stderr_text[:4000]})
-            emit("done", {"type": "done", "runId": run_id, "exitCode": exit_code})
+    def emit(self, frame_id, event, data):
+        """Write one SSE frame. Returns False once the client has gone away."""
+        frame = "id: %d\nevent: %s\ndata: %s\n\n" % (frame_id, event, json.dumps(data))
+        try:
+            self.wfile.write(frame.encode("utf-8"))
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False
 
-        except Exception as exc:
-            emit("error", {"type": "error", "message": str(exc)})
-        finally:
-            with RUNS_LOCK:
-                RUNS.pop(run_id, None)
-            if proc:
-                kill_process_tree(proc)
-            RUN_SLOTS.release()
+    def ping(self):
+        """Idle keepalive so tunnels don't drop a quiet connection."""
+        try:
+            self.wfile.write(b": ping\n\n")
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False
 
 
 def main():
@@ -461,6 +605,8 @@ def main():
     server = ThreadingHTTPServer((host, port), Bridge)
     server.daemon_threads = True
 
+    threading.Thread(target=reap_runs, daemon=True).start()
+
     print("")
     print("  Claude Code bridge")
     print("  ------------------")
@@ -468,6 +614,8 @@ def main():
     print("  claude binary  %s" % (CLAUDE_BIN or "NOT FOUND - set claude_path in config.json"))
     print("  working dir    %s" % os.path.abspath(CONFIG["default_cwd"]))
     print("  permissions    %s" % CONFIG["default_permission_mode"])
+    print("  runs kept for  %ss after finishing (background reconnect window)"
+          % CONFIG.get("run_retention_seconds", 3600))
     print("")
     print("  access token   %s" % CONFIG["token"])
     print("  (paste this into the web UI's Settings panel)")
@@ -482,8 +630,9 @@ def main():
     except KeyboardInterrupt:
         print("\nshutting down")
         with RUNS_LOCK:
-            for proc in list(RUNS.values()):
-                kill_process_tree(proc)
+            for run in list(RUNS.values()):
+                if run.proc:
+                    kill_process_tree(run.proc)
         server.shutdown()
 
 

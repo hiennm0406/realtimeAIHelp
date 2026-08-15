@@ -126,16 +126,32 @@ So:
 | `allowed_origins` | `["*"]` | CORS. Narrow this to your site's URL once deployed. |
 | `max_concurrent` | `2` | Simultaneous Claude runs. |
 | `run_timeout_seconds` | `1800` | Hard stop for one run. |
+| `run_retention_seconds` | `3600` | How long a finished run stays reconnectable after it ends. Raise it to step away for longer. |
+
+## Background runs
+
+A run is driven by a background worker that is independent of the browser
+connection. Its events are buffered in memory, so closing the tab, losing signal,
+or walking away does **not** stop the agent — it keeps working. When you come
+back the UI reconnects with `GET /api/stream?runId=…`, replays everything it
+missed, and tails the run to the end. Finished runs remain reconnectable for
+`run_retention_seconds`; after that the bridge drops them and reconnecting
+returns `404`. `POST /api/abort` is the only thing that actually stops a run.
 
 ## HTTP API
 
 All routes need `Authorization: Bearer <token>`.
 
-- `GET /api/health` → bridge status, resolved Claude path, working dir.
+- `GET /api/health` → bridge status, resolved Claude path, working dir, active run count.
+- `GET /api/runs` → `{ runs: [{ runId, status, done, conversationId, startedAt, finishedAt, frames, prompt }] }`. Running and recently-finished runs, so a returning client can see what is still cooking.
 - `POST /api/chat` → `text/event-stream`. Body:
-  `{ prompt, sessionId?, model?, effort?, permissionMode? }`.
+  `{ prompt, sessionId?, conversationId?, model?, effort?, permissionMode? }`.
+  Starts a run and streams it. The run keeps going even if this connection drops.
   SSE events: `bridge` (run started, carries `runId`), `claude` (one raw
   `stream-json` object), `notice`, `error`, `done`.
+- `GET /api/stream?runId=…&offset=N` → `text/event-stream`. Reconnects to an
+  existing run and replays its buffered frames from index `N` (0 = the whole
+  run), then tails until it finishes. `404` if the run is unknown or aged out.
 - `POST /api/abort` → `{ runId }`, kills that run and its child processes.
 
 Conversation continuity works by echoing the `session_id` from Claude Code's
