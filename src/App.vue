@@ -5,12 +5,6 @@
         <div class="brand__title">realtimeAIHelp</div>
         <div class="brand__sub">Claude Code, from any device</div>
       </div>
-
-      <nav class="nav">
-        <RouterLink class="nav__link" :to="{ name: 'chat' }">Chat</RouterLink>
-        <RouterLink class="nav__link" :to="{ name: 'items' }">Items</RouterLink>
-        <RouterLink class="nav__link" :to="{ name: 'itemdetail' }">Item Detail</RouterLink>
-      </nav>
     </header>
 
     <main class="content">
@@ -54,24 +48,6 @@ export default {}
 .brand__sub {
   font-size: 12px;
   color: var(--muted);
-}
-
-.nav {
-  display: flex;
-  gap: 10px;
-}
-
-.nav__link {
-  padding: 8px 10px;
-  border-radius: 10px;
-  color: var(--text);
-  text-decoration: none;
-  border: 1px solid transparent;
-}
-
-.nav__link.router-link-active {
-  border-color: var(--border);
-  background: var(--panel);
 }
 
 .content {

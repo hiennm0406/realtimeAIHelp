@@ -70,10 +70,7 @@ security section in [`bridge/README.md`](bridge/README.md) before exposing it.
 ## Layout
 
 ```
-bridge/            Python bridge (stdlib only) + its docs
-src/lib/           bridge client, SSE parsing, stream-json -> timeline, markdown
+bridge/                Python bridge (stdlib only) + its docs
+src/lib/               bridge client, SSE parsing, stream-json -> timeline, markdown
 src/components/chat/   chat UI
-src/components/items/  AutoBattleFantasy item database (kept from the old project)
 ```
-
-The item database still lives at `/items` and `/itemdetail`.

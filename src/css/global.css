@@ -1,4 +1,4 @@
-/* Global reset + theme (HowBazaar-ish, dark UI) */
+/* Global reset + dark theme */
 :root {
   --bg: #0b0f14;
   --panel: #111827;
@@ -42,11 +42,6 @@ a {
   border-radius: var(--radius);
 }
 
-button.card {
-  color: var(--text);
-  font: inherit;
-}
-
 .btn {
   appearance: none;
   border: 1px solid var(--border);
@@ -61,6 +56,11 @@ button.card {
   border-color: color-mix(in srgb, var(--border) 40%, white);
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .input {
   width: 100%;
   border: 1px solid var(--border);
@@ -73,183 +73,4 @@ button.card {
 
 .input:focus {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-
-.table_content{
-  width: 100%;
-}
-
-.table_content tr td{
-  vertical-align: top;
-  padding: 15px;
-}
-
-.text_left{
-  text-align: left;
-}
-
-.text_cen{
-  text-align: center;
-}
-
- /* group button */
- .btn-group button {
-  background-color: white; /* Green background */
-  border: 1px solid #6f00ff; /* Green border */
-  color: black; /* White text */
-  padding: 10px 24px; /* Some padding */
-  cursor: pointer; /* Pointer/hand icon */
-}
-
-.btn-group .active{
-  background-color: #6f00ff;
-  color: white;
-}
-
-/* Clear floats (clearfix hack) */
-.btn-group:after {
-  content: "";
-  clear: both;
-  display: table;
-}
-
-.btn-group button:not(:last-child) {
-  border-right: none; /* Prevent double borders */
-}
-
-/* Add a background color on hover */
-.btn-group button:hover {
-  background-color: #5205b8;
-  columns: white;
-}
-
-
-/* Skill container */
-
-.skill_container{
-  border: 1px solid black;
-  border-radius: 10px;
-  display: inline-block;
-  width: 100%;
-}
-
-.skill_container .img{
-  text-align: center;
-  float: left;
-  width: 30%;
-}
-.skill_container .img img{
- height: 60px;
-}
-
-.skill_container .name{
-  text-align: center;
-  float: left;
-  width: 70%;
-  font-weight: bolder;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.27)
-}
-
-.skill_container .type{
-  float: left;
-  width: 40%;
-}
-
-.skill_container .cost{
-  float: left;
-  width: 30%;
-}
-
-.skill_container .tag{
-  text-align: center;
-  float: left;
-  width: 100%;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.27)
-}
-
-.skill_container .description{
-  float: left;
-  padding: 4px;
-  width: 100%;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.27)
-}
-
-
-/* damage type */
-
-.phys{
-  color:purple;
-  font-weight: bold;
-}
-
-.fire{
-  color: red;
-  font-weight: bold;
-}
-.ice{
-  color:aqua;
-  font-weight: bold;
-}
-.lightning{
-  color:#d7d700;
-  font-weight: bold;
-}
-.anima{
-  color:#6f00ff;
-  font-weight: bold;
-}
-
-.tactic {
-  height: 60px;
-  width: 60px;
-  background-color: black;
-  /* border: 2px solid red; */
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.tactic.ally {
-  border: 2px solid blue;
-}
-.tactic.enemy {
-  border: 2px solid red;
-}
-
-.tactic_img {
-  height: 60px;
-  width: 60px;
-  /* border: 2px solid red; */
-  border-radius: 50%;
-  display: inline-block;
-}
-.tactic_img.ally {
-  border: 2px solid blue;
-}
-.tactic_img.enemy {
-  border: 2px solid red;
-}
-
-/* perk table */
-.perk_table{
-  width: 100%;
-}
-.perk_table tr td{
-  width: 25%;
-}
-
-
-.perk_table tr td:nth-child(2){
-  border-right: 2px solid black;
-}
-.perk_table tr td:nth-child(3){
-  border-left: 2px solid black;
-}
-
-.perk_table tr .box{
-  text-align: center;
-  border: 1px solid rgba(0, 0, 0, 0.192);
-}
-
-.perk_table tr .red{
-  background-color: rgba(218, 102, 102, 0.575);
 }
