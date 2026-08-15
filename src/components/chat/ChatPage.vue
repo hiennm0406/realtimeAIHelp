@@ -1,76 +1,40 @@
 <template>
-  <div class="chat">
-    <header class="chat__bar card">
-      <div class="chat__id">
-        <b>Claude Code</b>
-        <span v-if="convo.model" class="chat__pill">{{ convo.model }}</span>
-        <span v-if="convo.permissionMode" class="chat__pill">{{ convo.permissionMode }}</span>
-        <span v-if="convo.sessionId" class="chat__pill" :title="convo.sessionId">
-          session {{ convo.sessionId.slice(0, 8) }}
-        </span>
-      </div>
-
-      <div class="chat__bartools">
-        <button
-          v-if="configured"
-          class="chat__ctx"
-          type="button"
-          :class="ctxClass"
-          :disabled="running"
-          :title="
-            convo.context
-              ? `${formatTokens(convo.context.used)} of ${formatTokens(convo.context.window)} context tokens used — click to run /context`
-              : 'Run /context'
-          "
-          @click="sendCommand('/context')"
-        >
-          {{ convo.context ? `${convo.context.percentLeft.toFixed(0)}% context` : '/context' }}
-        </button>
-        <span v-if="convo.totals.cost" class="chat__total" title="Total cost this conversation">
-          {{ formatCost(convo.totals.cost) }}
-        </span>
-        <button class="btn" type="button" @click="showHistory = !showHistory">
-          Chats<span v-if="history.length"> ({{ history.length }})</span>
-        </button>
+  <div class="workspace">
+    <aside class="sidebar card">
+      <div class="sidebar__head">
+        <b>Chats<span v-if="history.length"> · {{ history.length }}</span></b>
         <button class="btn" type="button" :disabled="running" @click="startNewChat">
           New
         </button>
-        <button class="btn" type="button" @click="showSettings = !showSettings">
-          Settings
-        </button>
-      </div>
-    </header>
-
-    <div v-if="showHistory" class="side-backdrop" @click="showHistory = false"></div>
-    <aside v-if="showHistory" class="hist card">
-      <div class="hist__head">
-        <b>Chat history</b>
-        <button class="btn" type="button" @click="showHistory = false">Close</button>
       </div>
 
-      <p v-if="!history.length" class="hist__empty">
-        No saved chats yet. Conversations are stored in this browser once you send a
-        message.
+      <p v-if="!history.length" class="sidebar__empty">
+        No saved chats yet.
       </p>
 
-      <ul v-else class="hist__list">
+      <ul v-else class="sidebar__list">
         <li
           v-for="entry in history"
           :key="entry.id"
-          class="hist__item"
-          :class="{ 'hist__item--active': entry.id === conversationId }"
+          class="sidebar__item"
+          :class="{ 'sidebar__item--active': entry.id === conversationId }"
         >
-          <button class="hist__open" type="button" :disabled="running" @click="openChat(entry.id)">
-            <span class="hist__title">{{ entry.title }}</span>
-            <span class="hist__meta">
+          <button
+            class="sidebar__open"
+            type="button"
+            :disabled="running"
+            :title="entry.title"
+            @click="openChat(entry.id)"
+          >
+            <span class="sidebar__title">{{ entry.title }}</span>
+            <span class="sidebar__meta">
               {{ entry.messages }} msg
               <template v-if="entry.cost"> · {{ formatCost(entry.cost) }}</template>
-              <template v-if="entry.model"> · {{ entry.model }}</template>
               · {{ formatWhen(entry.updatedAt) }}
             </span>
           </button>
           <button
-            class="hist__del"
+            class="sidebar__del"
             type="button"
             title="Delete this chat"
             @click="removeChat(entry.id)"
@@ -80,6 +44,42 @@
         </li>
       </ul>
     </aside>
+
+    <div class="chat">
+      <header class="chat__bar card">
+        <div class="chat__id">
+          <b class="chat__brand">Trợ lý của Lan Hương, phục vụ mọi nơi</b>
+          <span v-if="convo.model" class="chat__pill">{{ convo.model }}</span>
+          <span v-if="convo.permissionMode" class="chat__pill">{{ convo.permissionMode }}</span>
+          <span v-if="convo.sessionId" class="chat__pill" :title="convo.sessionId">
+            session {{ convo.sessionId.slice(0, 8) }}
+          </span>
+        </div>
+
+        <div class="chat__bartools">
+          <button
+            v-if="configured"
+            class="chat__ctx"
+            type="button"
+            :class="ctxClass"
+            :disabled="running"
+            :title="
+              convo.context
+                ? `${formatTokens(convo.context.used)} of ${formatTokens(convo.context.window)} context tokens used — click to run /context`
+                : 'Run /context'
+            "
+            @click="sendCommand('/context')"
+          >
+            {{ convo.context ? `${convo.context.percentLeft.toFixed(0)}% context` : '/context' }}
+          </button>
+          <span v-if="convo.totals.cost" class="chat__total" title="Total cost this conversation">
+            {{ formatCost(convo.totals.cost) }}
+          </span>
+          <button class="btn" type="button" @click="showSettings = !showSettings">
+            Settings
+          </button>
+        </div>
+      </header>
 
     <SettingsDrawer
       v-if="showSettings"
@@ -112,8 +112,11 @@
           <div class="md" v-html="renderMarkdown(item.text)"></div>
         </div>
 
-        <div v-else-if="item.kind === 'thinking'" class="turn turn--claude">
-          <ThinkingBlock v-if="settings.showThinking" :item="item" />
+        <div
+          v-else-if="item.kind === 'thinking' && settings.showThinking && (!item.done || item.text)"
+          class="turn turn--claude"
+        >
+          <ThinkingBlock :item="item" />
         </div>
 
         <div v-else-if="item.kind === 'tool'" class="turn turn--claude">
@@ -170,6 +173,7 @@
         Send
       </button>
     </form>
+    </div>
   </div>
 </template>
 
@@ -217,7 +221,6 @@ export default {
       runId: '',
       controller: null,
       showSettings: false,
-      showHistory: false,
     }
   },
   computed: {
@@ -267,15 +270,11 @@ export default {
       if (this.running) return
       this.conversationId = newConversationId()
       Object.assign(this.convo, createConversation())
-      this.showHistory = false
       this.scrollToEnd()
     },
 
     openChat(id) {
-      if (this.running || id === this.conversationId) {
-        this.showHistory = false
-        return
-      }
+      if (this.running || id === this.conversationId) return
       const body = loadConversation(id)
       if (!body) {
         // Index entry without a body: the body was evicted for space.
@@ -285,7 +284,6 @@ export default {
       }
       this.conversationId = id
       Object.assign(this.convo, restoreConversation(body))
-      this.showHistory = false
       this.scrollToEnd()
     },
 
@@ -423,13 +421,27 @@ export default {
 </script>
 
 <style scoped>
+.workspace {
+  display: flex;
+  gap: 12px;
+  height: calc(100vh - 44px);
+}
+
+.sidebar {
+  flex: none;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+
 .chat {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: calc(100vh - 100px);
-  max-width: 1080px;
-  margin: 0 auto;
 }
 
 .chat__bar {
@@ -502,77 +514,56 @@ export default {
   border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
 }
 
-.side-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 40;
-}
-
-.hist {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  width: min(360px, 92vw);
-  padding: 16px;
-  border-radius: 0;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
-  overflow-y: auto;
-  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.35);
-}
-
-.hist__head {
+.sidebar__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
-.hist__empty {
+.sidebar__empty {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--muted);
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
-.hist__list {
+.sidebar__list {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
-.hist__item {
+.sidebar__item {
   display: flex;
   align-items: stretch;
-  gap: 4px;
-  border-radius: 10px;
+  gap: 2px;
+  border-radius: 9px;
   border: 1px solid transparent;
 }
 
-.hist__item:hover {
+.sidebar__item:hover {
   border-color: var(--border);
   background: var(--panel-2);
 }
 
-.hist__item--active {
+.sidebar__item--active {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.hist__open {
+.sidebar__open {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px;
+  gap: 2px;
+  padding: 7px 9px;
   background: none;
   border: 0;
   color: var(--text);
@@ -581,36 +572,38 @@ export default {
   cursor: pointer;
 }
 
-.hist__open:disabled {
-  opacity: 0.5;
+.sidebar__open:disabled {
   cursor: default;
 }
 
-.hist__title {
-  font-size: 13.5px;
+.sidebar__title {
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.hist__meta {
-  font-size: 11.5px;
+.sidebar__meta {
+  font-size: 11px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.hist__del {
+.sidebar__del {
   flex: none;
-  padding: 0 10px;
+  padding: 0 8px;
   background: none;
   border: 0;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 9px;
 }
 
-.hist__del:hover {
+.sidebar__del:hover {
   color: var(--bad);
   background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
@@ -746,8 +739,13 @@ export default {
 }
 
 @media (max-width: 640px) {
-  .chat {
-    height: calc(100vh - 132px);
+  .workspace {
+    height: calc(100vh - 76px);
+  }
+
+  .sidebar {
+    width: 132px;
+    padding: 10px;
   }
 
   .bubble {
