@@ -138,34 +138,35 @@
       </div>
 
       <template v-for="item in convo.timeline" :key="item.id">
-        <div v-if="item.kind === 'user'" class="turn turn--user">
+        <div v-if="item.kind === 'user'" class="turn turn--user" :data-turn-id="item.id">
           <div class="bubble">{{ item.text }}</div>
         </div>
 
-        <div v-else-if="item.kind === 'text'" class="turn turn--claude">
-          <div class="md" v-html="renderMarkdown(item.text)"></div>
+        <div v-else-if="item.kind === 'text'" class="turn turn--claude" :data-turn-id="item.id">
+          <MarkdownText :text="item.text" :done="item.done" />
         </div>
 
         <div
           v-else-if="item.kind === 'thinking' && settings.showThinking && (!item.done || item.text)"
           class="turn turn--claude"
+          :data-turn-id="item.id"
         >
           <ThinkingBlock :item="item" />
         </div>
 
-        <div v-else-if="item.kind === 'tool'" class="turn turn--claude">
+        <div v-else-if="item.kind === 'tool'" class="turn turn--claude" :data-turn-id="item.id">
           <ToolBlock :item="item" :show-io="settings.showToolIO" />
         </div>
 
-        <div v-else-if="item.kind === 'result'" class="turn turn--claude">
+        <div v-else-if="item.kind === 'result'" class="turn turn--claude" :data-turn-id="item.id">
           <ResultCard :item="item" />
         </div>
 
-        <div v-else-if="item.kind === 'notice'" class="turn turn--claude">
+        <div v-else-if="item.kind === 'notice'" class="turn turn--claude" :data-turn-id="item.id">
           <pre class="notice">{{ item.text }}</pre>
         </div>
 
-        <div v-else-if="item.kind === 'error'" class="turn turn--claude">
+        <div v-else-if="item.kind === 'error'" class="turn turn--claude" :data-turn-id="item.id">
           <div class="errbox">{{ item.text }}</div>
         </div>
       </template>
@@ -177,6 +178,17 @@
         </div>
       </div>
     </div>
+
+    <button
+      v-if="showJumpUp"
+      class="chat__jumpup"
+      type="button"
+      title="Về đầu câu trả lời"
+      aria-label="Về đầu câu trả lời"
+      @click="scrollToAnswerStart"
+    >
+      ↑
+    </button>
 
     <form class="chat__composer card" @submit.prevent="send">
       <textarea
@@ -214,6 +226,7 @@
 
 <script>
 import { reactive } from 'vue'
+import MarkdownText from './MarkdownText.vue'
 import ResultCard from './ResultCard.vue'
 import RulesDrawer from './RulesDrawer.vue'
 import SettingsDrawer from './SettingsDrawer.vue'
@@ -244,7 +257,6 @@ import {
   saveConversation,
 } from '../../lib/history.js'
 import { formatCost, formatTokens } from '../../lib/format.js'
-import { renderMarkdown } from '../../lib/markdown.js'
 
 const STATUS_LABELS = {
   starting: 'Starting…',
@@ -257,7 +269,7 @@ const STATUS_LABELS = {
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 
 export default {
-  components: { ResultCard, RulesDrawer, SettingsDrawer, ThinkingBlock, ToolBlock },
+  components: { MarkdownText, ResultCard, RulesDrawer, SettingsDrawer, ThinkingBlock, ToolBlock },
   data() {
     return {
       settings: reactive(loadSettings()),
@@ -270,6 +282,8 @@ export default {
       controller: null,
       showSettings: false,
       showRules: false,
+      // Whether to show the little "jump to the start of this answer" arrow.
+      showJumpUp: false,
       // On phones the history panel is an overlay, so start it closed to keep
       // the chat in full view; on desktop honor the saved preference.
       sidebarOpen: isMobile()
@@ -291,6 +305,13 @@ export default {
       return ''
     },
   },
+  created() {
+    // Non-reactive scratch for stream batching, kept off `data` on purpose so it
+    // never triggers a re-render on its own.
+    this._pending = [] // claude events awaiting a coalesced flush
+    this._raf = null // pending requestAnimationFrame id
+    this._pinned = true // is the view following the bottom of the log?
+  },
   mounted() {
     if (!this.configured) this.showSettings = true
     this.refreshHistory()
@@ -303,17 +324,24 @@ export default {
       if (document.visibilityState === 'visible') this.maybeResume()
     }
     document.addEventListener('visibilitychange', this.onVisible)
+
+    // One persistent scroll listener drives both auto-follow and the jump arrow.
+    this.$nextTick(() => {
+      const el = this.$refs.scroller
+      if (el) el.addEventListener('scroll', this.onLogScroll, { passive: true })
+    })
   },
   beforeUnmount() {
     // Abort only the local reader. The run keeps going on the bridge so we can
     // reconnect to it when the user returns.
     this.controller?.abort()
     if (this.onVisible) document.removeEventListener('visibilitychange', this.onVisible)
+    this.$refs.scroller?.removeEventListener('scroll', this.onLogScroll)
+    if (this._raf != null) cancelAnimationFrame(this._raf)
   },
   methods: {
     formatCost,
     formatTokens,
-    renderMarkdown,
 
     applySettings(next) {
       Object.assign(this.settings, next)
@@ -404,7 +432,73 @@ export default {
       this.$nextTick(() => {
         const el = this.$refs.scroller
         if (el) el.scrollTop = el.scrollHeight
+        this.updateJumpUp()
       })
+    },
+
+    onLogScroll() {
+      const el = this.$refs.scroller
+      if (!el) return
+      // Auto-follow only while the user is near the bottom, so scrolling back
+      // through a long transcript isn't yanked down by new output.
+      const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+      this._pinned = gap < 120
+      this.updateJumpUp()
+    },
+
+    /** The DOM node of the first rendered block of the latest answer. */
+    answerStartEl() {
+      const scroller = this.$refs.scroller
+      const timeline = this.convo.timeline
+      if (!scroller || !timeline.length) return null
+      let from = 0
+      for (let i = timeline.length - 1; i >= 0; i -= 1) {
+        if (timeline[i].kind === 'user') {
+          from = i + 1
+          break
+        }
+      }
+      // Scan forward to the first block that actually has an element - some
+      // (e.g. hidden thinking) render nothing.
+      for (let i = from; i < timeline.length; i += 1) {
+        const el = scroller.querySelector(`[data-turn-id="${timeline[i].id}"]`)
+        if (el) return el
+      }
+      return null
+    },
+
+    updateJumpUp() {
+      const el = this.$refs.scroller
+      const startEl = this.answerStartEl()
+      // Offer the jump only once the answer's first line has scrolled out of
+      // view above - i.e. the answer is long and you're reading further down.
+      this.showJumpUp = Boolean(el && startEl && el.scrollTop > startEl.offsetTop + 40)
+    },
+
+    scrollToAnswerStart() {
+      const el = this.$refs.scroller
+      const startEl = this.answerStartEl()
+      if (!el || !startEl) return
+      el.scrollTo({ top: Math.max(0, startEl.offsetTop - 8), behavior: 'smooth' })
+    },
+
+    /** Drain buffered stream events into the timeline in one repaint. */
+    flushClaude() {
+      this._raf = null
+      if (!this._pending.length) return
+      const batch = this._pending
+      this._pending = []
+      for (const data of batch) applyClaudeEvent(this.convo, data)
+      this.afterStreamUpdate()
+    },
+
+    scheduleClaude() {
+      if (this._raf == null) this._raf = requestAnimationFrame(this.flushClaude)
+    },
+
+    afterStreamUpdate() {
+      if (this._pinned) this.scrollToEnd()
+      else this.updateJumpUp()
     },
 
     async stop() {
@@ -442,6 +536,7 @@ export default {
 
       this.runId = active.runId
       this.convo.status = 'reconnecting'
+      this._pinned = true
       this.runStream({
         isResume: true,
         anchor,
@@ -468,6 +563,7 @@ export default {
       const conversationId = this.conversationId
 
       this.convo.status = 'starting'
+      this._pinned = true
       await this.runStream({
         anchor,
         start: ({ signal, handlers }) =>
@@ -490,21 +586,7 @@ export default {
     async runStream({ start, anchor = 0, isResume = false }) {
       this.running = true
       this.controller = new AbortController()
-
-      // Only auto-scroll while the user is already near the bottom, so reading
-      // back through a long transcript isn't interrupted by new output.
-      let pinned = true
-      const scroller = this.$refs.scroller
-      const onScroll = () => {
-        if (!scroller) return
-        const gap = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-        pinned = gap < 120
-      }
-      scroller?.addEventListener('scroll', onScroll, { passive: true })
-
-      const nudge = () => {
-        if (pinned) this.scrollToEnd()
-      }
+      this._pending = []
 
       try {
         await start({
@@ -517,23 +599,28 @@ export default {
                 setActiveRun(this.conversationId, data.runId, anchor)
               }
             },
+            // High-frequency: buffer and apply at most once per animation frame,
+            // so a fast stream doesn't trigger a render per token.
             onClaude: (data) => {
-              applyClaudeEvent(this.convo, data)
-              nudge()
+              this._pending.push(data)
+              this.scheduleClaude()
             },
             onNotice: (data) => {
+              this.flushClaude()
               this.convo.timeline.push({
                 id: `n${Date.now()}${this.convo.timeline.length}`,
                 kind: 'notice',
                 text: data.text,
               })
-              nudge()
+              this.afterStreamUpdate()
             },
             onError: (data) => {
+              this.flushClaude()
               addLocalError(this.convo, data.message || 'The bridge reported an error.')
-              nudge()
+              this.afterStreamUpdate()
             },
             onDone: () => {
+              this.flushClaude()
               // The run is finished on the bridge; nothing left to reconnect to.
               this.convo.status = ''
               clearActiveRun(this.conversationId)
@@ -559,13 +646,13 @@ export default {
           )
         }
       } finally {
-        scroller?.removeEventListener('scroll', onScroll)
+        this.flushClaude() // drain anything the last frame didn't cover
         this.running = false
         this.runId = ''
         this.controller = null
         this.convo.status = ''
         this.persist()
-        nudge()
+        this.afterStreamUpdate()
       }
     },
   },
@@ -599,6 +686,34 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+}
+
+.chat__jumpup {
+  position: absolute;
+  right: 18px;
+  bottom: 82px;
+  z-index: 12;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.9;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.chat__jumpup:hover {
+  opacity: 1;
+  background: var(--panel);
 }
 
 .chat__bar {
@@ -812,6 +927,8 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 4px 2px;
+  /* Anchor for the jump button's offsetTop math. */
+  position: relative;
 }
 
 .chat__empty {
@@ -981,6 +1098,11 @@ export default {
 
   .chat__composer {
     padding: 8px;
+  }
+
+  .chat__jumpup {
+    right: 12px;
+    bottom: 72px;
   }
 }
 </style>
