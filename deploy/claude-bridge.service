@@ -1,0 +1,24 @@
+[Unit]
+Description=Claude Code bridge (realtimeAIHelp)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated, non-root user. Create with: sudo adduser --disabled-password claude
+User=claude
+# Where you cloned the repo:
+WorkingDirectory=/home/claude/realtimeAIHelp
+# Secrets (ANTHROPIC_API_KEY=...) live in this file, NOT in the unit:
+#   sudo install -m 600 -o claude -g claude deploy/claude-bridge.env.example /etc/claude-bridge.env
+#   sudo nano /etc/claude-bridge.env
+EnvironmentFile=/etc/claude-bridge.env
+ExecStart=/usr/bin/python3 bridge/server.py
+Restart=always
+RestartSec=3
+# Light hardening. Do NOT tighten further without testing - the bridge (in
+# bypassPermissions) legitimately runs arbitrary commands and writes files.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

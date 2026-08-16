@@ -1,0 +1,19 @@
+# Named cloudflared tunnel -> a STABLE https URL that survives restarts.
+# Put this at /home/claude/.cloudflared/config.yml (or /etc/cloudflared/config.yml).
+#
+# Prereqs (one-time):
+#   cloudflared tunnel login                       # opens a browser, pick your domain
+#   cloudflared tunnel create claude-bridge        # prints the TUNNEL_ID + creds file
+#   cloudflared tunnel route dns claude-bridge claude.example.com
+#
+# Then fill in TUNNEL_ID and your hostname below and run it as a service:
+#   sudo cloudflared service install
+#   sudo systemctl enable --now cloudflared
+
+tunnel: TUNNEL_ID
+credentials-file: /home/claude/.cloudflared/TUNNEL_ID.json
+
+ingress:
+  - hostname: claude.example.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404
