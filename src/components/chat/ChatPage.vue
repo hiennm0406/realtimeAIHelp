@@ -235,9 +235,9 @@ import ToolBlock from './ToolBlock.vue'
 import {
   abortRun,
   clearActiveRun,
+  fetchRunSnapshot,
   getActiveRun,
   loadSettings,
-  resumeChat,
   saveSettings,
   setActiveRun,
   streamChat,
@@ -526,10 +526,31 @@ export default {
       this.send()
     },
 
+    _sleep(ms, signal) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms)
+        if (signal) {
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer)
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true }
+          )
+        }
+      })
+    },
+
     /**
      * Reconnect to a run this conversation left working in the background.
-     * Truncates back to where the run started and replays it from the bridge, so
-     * the in-progress turn rebuilds exactly, however far it has got.
+     *
+     * Uses short polling of /api/run rather than a long-lived stream: quick
+     * tunnels routinely buffer or drop the streaming reconnect (the byte can
+     * arrive tens of seconds late, or not at all -> "network error"), whereas a
+     * plain request/response gets through. Truncates back to where the run
+     * started and rebuilds the in-progress turn, then keeps catching up until
+     * the run finishes.
      */
     maybeResume() {
       if (!this.configured || this.running) return
@@ -549,19 +570,101 @@ export default {
       this.runId = active.runId
       this.convo.status = 'reconnecting'
       this._pinned = true
-      this.runStream({
-        isResume: true,
-        anchor,
-        start: ({ signal, handlers, onActivity }) =>
-          resumeChat({
-            settings: this.settings,
-            runId: active.runId,
-            offset: 0,
-            handlers,
-            signal,
-            onActivity,
-          }),
-      })
+      this.pollResume(active.runId, anchor)
+    },
+
+    async pollResume(runId, anchor) {
+      this.running = true
+      this.controller = new AbortController()
+      const signal = this.controller.signal
+      const conversationId = this.conversationId
+      this._lastRx = performance.now()
+
+      const dispatch = (event, data) => {
+        if (event === 'claude') applyClaudeEvent(this.convo, data)
+        else if (event === 'bridge') {
+          if (data.type === 'started') setActiveRun(conversationId, runId, anchor)
+        } else if (event === 'notice') {
+          this.convo.timeline.push({
+            id: `n${Date.now()}${this.convo.timeline.length}`,
+            kind: 'notice',
+            text: data.text,
+          })
+        } else if (event === 'error') {
+          addLocalError(this.convo, data.message || 'The bridge reported an error.')
+        }
+      }
+
+      let offset = 0
+      let failures = 0
+      let ended = 'resolved'
+      try {
+        while (true) {
+          let snap
+          try {
+            snap = await fetchRunSnapshot(this.settings, runId, offset, signal)
+            failures = 0
+            this._lastRx = performance.now()
+          } catch (error) {
+            if (error.name === 'AbortError' || error.status === 404) throw error
+            // A transient tunnel/network blip: back off and try again rather
+            // than surfacing an error the user didn't cause.
+            failures += 1
+            if (failures >= 5) throw error
+            await this._sleep(2000, signal)
+            continue
+          }
+
+          for (const [event, data] of snap.frames) dispatch(event, data)
+          offset = snap.next
+          this.afterStreamUpdate()
+
+          if (snap.done) {
+            clearActiveRun(conversationId)
+            break
+          }
+          if (this.conversationId !== conversationId) break
+          await this._sleep(1500, signal)
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          ended = 'aborted'
+          if (!getActiveRun(conversationId)) addLocalError(this.convo, 'Stopped.')
+        } else if (error.status === 404) {
+          ended = 'error'
+          clearActiveRun(conversationId)
+          this.convo.timeline.push({
+            id: `n${Date.now()}${this.convo.timeline.length}`,
+            kind: 'notice',
+            text: 'The background run finished a while ago and its transcript is no longer available to replay.',
+          })
+        } else {
+          ended = 'error'
+          addLocalError(
+            this.convo,
+            `${error.message} Check that the bridge is running and reachable at ${this.settings.url}.`
+          )
+        }
+      } finally {
+        this.running = false
+        this.runId = ''
+        this.controller = null
+        this.convo.status = ''
+        this.persist()
+        this.afterStreamUpdate()
+
+        // Self-heal: if we dropped a still-active run while on screen, resume.
+        if (
+          ended !== 'error' &&
+          this.conversationId === conversationId &&
+          document.visibilityState === 'visible' &&
+          getActiveRun(conversationId)
+        ) {
+          setTimeout(() => {
+            if (this.conversationId === conversationId) this.maybeResume()
+          }, 800)
+        }
+      }
     },
 
     async send() {

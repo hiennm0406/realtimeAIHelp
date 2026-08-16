@@ -633,6 +633,39 @@ class Bridge(BaseHTTPRequestHandler):
                 return self.send_json(404, {"error": "no such run"})
             return self.stream_run(run, offset)
 
+        if path == "/api/run":
+            # A plain, non-streaming snapshot of a run from `offset`. Short
+            # request/response, so it survives tunnels that buffer or drop the
+            # long-lived /api/stream reconnect. Clients poll this to catch up.
+            if not self.authorized():
+                return self.send_json(401, {"error": "unauthorized"})
+            params = parse_qs(parsed.query)
+            run_id = (params.get("runId", [""])[0] or "").strip()
+            try:
+                offset = int(params.get("offset", ["0"])[0])
+            except ValueError:
+                offset = 0
+            with RUNS_LOCK:
+                run = RUNS.get(run_id)
+            if not run:
+                return self.send_json(404, {"error": "no such run"})
+            with run.cond:
+                offset = max(0, offset)
+                frames = [list(f) for f in run.frames[offset:]]
+                total = len(run.frames)
+                done = run.done
+                status = run.status
+            return self.send_json(
+                200,
+                {
+                    "runId": run.id,
+                    "done": done,
+                    "status": status,
+                    "next": total,
+                    "frames": frames,
+                },
+            )
+
         return self.send_json(404, {"error": "not found"})
 
     def do_POST(self):

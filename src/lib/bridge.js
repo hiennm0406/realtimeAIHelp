@@ -125,6 +125,21 @@ export async function abortRun(settings, runId) {
   }).catch(() => {})
 }
 
+/**
+ * A plain (non-streaming) snapshot of a run's frames from `offset` onward, plus
+ * whether it's finished. Short request/response, so it works over tunnels that
+ * buffer or drop the long-lived /api/stream reconnect. Clients poll this.
+ *
+ * Returns `{ runId, done, status, next, frames: [[event, data], ...] }`.
+ * Throws with `error.status === 404` when the run is gone.
+ */
+export async function fetchRunSnapshot(settings, runId, offset = 0, signal) {
+  const url = `${baseUrl(settings)}/api/run?runId=${encodeURIComponent(runId)}&offset=${offset}`
+  const response = await fetch(url, { headers: authHeaders(settings), signal })
+  if (!response.ok) throw await errorFromResponse(response)
+  return response.json()
+}
+
 /** Runs the bridge is still holding: in-flight ones, plus recently finished. */
 export async function listRuns(settings) {
   const response = await fetch(`${baseUrl(settings)}/api/runs`, {
@@ -208,8 +223,8 @@ async function errorFromResponse(response) {
 
 /**
  * Starts a Claude Code run and streams it. The run keeps going on the bridge
- * even if this connection drops, so a returning client can pick it up again with
- * `resumeChat`.
+ * even if this connection drops, so a returning client can pick it back up by
+ * polling `fetchRunSnapshot`.
  */
 export async function streamChat({
   settings,
@@ -234,21 +249,6 @@ export async function streamChat({
     }),
   })
 
-  if (!response.ok) throw await errorFromResponse(response)
-  await readEventStream(response, handlers, onActivity)
-}
-
-/**
- * Reconnects to a run that is still alive (or recently finished) on the bridge
- * and replays it from `offset`. With offset 0 the whole run replays, which is
- * how a fresh page rebuilds the in-progress turn after the user comes back.
- *
- * Throws with `error.status === 404` when the run is gone (finished long enough
- * ago that the bridge dropped it).
- */
-export async function resumeChat({ settings, runId, offset = 0, handlers = {}, signal, onActivity }) {
-  const url = `${baseUrl(settings)}/api/stream?runId=${encodeURIComponent(runId)}&offset=${offset}`
-  const response = await fetch(url, { headers: authHeaders(settings), signal })
   if (!response.ok) throw await errorFromResponse(response)
   await readEventStream(response, handlers, onActivity)
 }
