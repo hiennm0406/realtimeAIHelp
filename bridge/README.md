@@ -125,7 +125,8 @@ So:
 | `allowed_tools` | `[]` | `[]` means every tool, including WebSearch and WebFetch. |
 | `allowed_origins` | `["*"]` | CORS. Narrow this to your site's URL once deployed. |
 | `max_concurrent` | `2` | Simultaneous Claude runs. |
-| `run_timeout_seconds` | `1800` | Hard stop for one run. |
+| `run_idle_timeout_seconds` | `1800` | Kill a run only after this long with **no output at all**. An actively working agent keeps streaming, so it's never reaped mid-work — only a hung one is. (Replaces the old wall-clock `run_timeout_seconds`, still honored if present.) |
+| `run_max_seconds` | `21600` | Absolute backstop, in case a run prints forever. The idle timeout is the real guard. |
 | `run_retention_seconds` | `21600` | How long a finished run stays reconnectable (in memory and on disk). Raise it to step away for longer. |
 
 ## Background runs

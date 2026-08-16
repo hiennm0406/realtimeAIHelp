@@ -71,8 +71,15 @@ DEFAULT_CONFIG = {
     "allowed_origins": ["*"],
     # How many Claude runs may execute at the same time.
     "max_concurrent": 2,
-    # Hard stop for a single run, in seconds.
-    "run_timeout_seconds": 1800,
+    # Idle timeout: kill a run only after this many seconds with NO output at all
+    # (no thinking, no tool call, no token). An actively working agent streams
+    # constantly, so it resets this clock and is never reaped mid-work - only a
+    # genuinely stuck/hung process is. This replaces the old wall-clock
+    # "run_timeout_seconds", which killed long-but-healthy runs at 30 min.
+    "run_idle_timeout_seconds": 1800,
+    # Absolute backstop, in seconds. Ends even a run that keeps printing forever
+    # (e.g. a tool stuck in a loop). Set high; the idle timeout is the real guard.
+    "run_max_seconds": 21600,
     # How long a finished run is kept (in memory and on disk) so a returning
     # browser can still replay its result. After this, the run is dropped and its
     # transcript file deleted; reconnecting to it returns 404. Raise it to step
@@ -439,17 +446,47 @@ def run_worker(run, payload):
         threading.Thread(target=pump_stdout, daemon=True).start()
         threading.Thread(target=pump_stderr, daemon=True).start()
 
-        deadline = time.time() + float(CONFIG["run_timeout_seconds"])
+        # Back-compat: honor a legacy "run_timeout_seconds" as the idle timeout.
+        idle_timeout = float(
+            CONFIG.get("run_idle_timeout_seconds")
+            or CONFIG.get("run_timeout_seconds")
+            or 1800
+        )
+        hard_cap = float(CONFIG.get("run_max_seconds") or 21600)
+        started = time.time()
+        last_output = started
         timed_out = False
 
         while True:
-            if time.time() > deadline:
-                run.append("error", {"type": "error", "message": "run timed out"})
+            now = time.time()
+            # Reap only on genuine silence, not on total elapsed time: a run that
+            # is actively streaming resets last_output every line below.
+            if now - last_output > idle_timeout:
+                run.append(
+                    "error",
+                    {
+                        "type": "error",
+                        "message": "run stopped: no output for %d s (idle timeout)"
+                        % int(idle_timeout),
+                    },
+                )
+                kill_process_tree(proc)
+                timed_out = True
+                break
+            if now - started > hard_cap:
+                run.append(
+                    "error",
+                    {
+                        "type": "error",
+                        "message": "run stopped: exceeded max runtime of %d s"
+                        % int(hard_cap),
+                    },
+                )
                 kill_process_tree(proc)
                 timed_out = True
                 break
             try:
-                # A short poll so the deadline is enforced even while Claude is
+                # A short poll so the timeouts are enforced even while Claude is
                 # silent (no output line to wake us).
                 kind, line = lines.get(timeout=5)
             except queue.Empty:
@@ -458,6 +495,8 @@ def run_worker(run, payload):
             if kind == "eof":
                 break
 
+            # Any output - even a blank line - proves the run is alive.
+            last_output = time.time()
             line = line.strip()
             if not line:
                 continue
