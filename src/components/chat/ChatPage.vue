@@ -260,7 +260,7 @@ import { formatCost, formatTokens } from '../../lib/format.js'
 
 const STATUS_LABELS = {
   starting: 'Starting…',
-  reconnecting: 'Reconnecting to the background run…',
+  reconnecting: 'Resuming…',
   requesting: 'Contacting the API…',
   thinking: 'Thinking…',
   responding: 'Responding…',
@@ -311,6 +311,7 @@ export default {
     this._pending = [] // claude events awaiting a coalesced flush
     this._raf = null // pending requestAnimationFrame id
     this._pinned = true // is the view following the bottom of the log?
+    this._lastRx = 0 // performance.now() of the last stream chunk (liveness)
   },
   mounted() {
     if (!this.configured) this.showSettings = true
@@ -318,10 +319,21 @@ export default {
     // Reopen the most recent chat so a reload doesn't look like data loss.
     const latest = this.history[0]
     if (latest) this.openChat(latest.id)
-    // Coming back to a backgrounded tab: if the run we left behind kept working
-    // on the bridge, pick its progress back up without a reload.
+    // Coming back to a backgrounded tab: keep a live stream to the run, so an
+    // answer that is still being written continues on screen as usual.
     this.onVisible = () => {
-      if (document.visibilityState === 'visible') this.maybeResume()
+      if (document.visibilityState !== 'visible') return
+      const active = getActiveRun(this.conversationId)
+      if (!active?.runId) return
+      if (!this.running) {
+        // No live reader - reconnect and tail the run.
+        this.maybeResume()
+      } else if (performance.now() - this._lastRx > 15000) {
+        // A backgrounded tab often leaves a dead socket that still looks
+        // "running". If nothing (not even a keepalive) has arrived for a while,
+        // drop it; runStream's finally then reconnects a fresh live stream.
+        this.controller?.abort()
+      }
     }
     document.addEventListener('visibilitychange', this.onVisible)
 
@@ -540,8 +552,15 @@ export default {
       this.runStream({
         isResume: true,
         anchor,
-        start: ({ signal, handlers }) =>
-          resumeChat({ settings: this.settings, runId: active.runId, offset: 0, handlers, signal }),
+        start: ({ signal, handlers, onActivity }) =>
+          resumeChat({
+            settings: this.settings,
+            runId: active.runId,
+            offset: 0,
+            handlers,
+            signal,
+            onActivity,
+          }),
       })
     },
 
@@ -566,7 +585,7 @@ export default {
       this._pinned = true
       await this.runStream({
         anchor,
-        start: ({ signal, handlers }) =>
+        start: ({ signal, handlers, onActivity }) =>
           streamChat({
             settings: this.settings,
             prompt,
@@ -574,6 +593,7 @@ export default {
             conversationId,
             handlers,
             signal,
+            onActivity,
           }),
       })
     },
@@ -587,10 +607,19 @@ export default {
       this.running = true
       this.controller = new AbortController()
       this._pending = []
+      this._lastRx = performance.now()
+      // How the stream ended decides whether we auto-reconnect: 'resolved' (the
+      // socket closed) and 'aborted' (we dropped a stale one) are recoverable;
+      // 'error' (bridge unreachable) is not, so we don't hammer it.
+      let ended = 'resolved'
+      const conversationId = this.conversationId
 
       try {
         await start({
           signal: this.controller.signal,
+          onActivity: () => {
+            this._lastRx = performance.now()
+          },
           handlers: {
             onBridge: (data) => {
               if (data.type === 'started') {
@@ -629,10 +658,12 @@ export default {
         })
       } catch (error) {
         if (error.name === 'AbortError') {
+          ended = 'aborted'
           // Left mid-run: don't write an error, the run is still going in the
           // background and can be picked back up.
           if (!getActiveRun(this.conversationId)) addLocalError(this.convo, 'Stopped.')
         } else if (isResume && error.status === 404) {
+          ended = 'error'
           clearActiveRun(this.conversationId)
           this.convo.timeline.push({
             id: `n${Date.now()}${this.convo.timeline.length}`,
@@ -640,6 +671,7 @@ export default {
             text: 'The background run finished a while ago and its transcript is no longer available to replay.',
           })
         } else {
+          ended = 'error'
           addLocalError(
             this.convo,
             `${error.message} Check that the bridge is running and reachable at ${this.settings.url}.`
@@ -653,6 +685,20 @@ export default {
         this.convo.status = ''
         this.persist()
         this.afterStreamUpdate()
+
+        // Self-heal: the run is still active (no 'done' cleared its marker) and
+        // we're on screen, so a dropped/aborted socket means reconnect and keep
+        // streaming the answer live - not sit frozen "in the background".
+        if (
+          ended !== 'error' &&
+          this.conversationId === conversationId &&
+          document.visibilityState === 'visible' &&
+          getActiveRun(conversationId)
+        ) {
+          setTimeout(() => {
+            if (this.conversationId === conversationId) this.maybeResume()
+          }, 500)
+        }
       }
     },
   },

@@ -144,8 +144,11 @@ export async function listRuns(settings) {
  *   onNotice(data)  - non-JSON output Claude printed
  *   onError(data)   - bridge or Claude error
  *   onDone(data)    - run finished, carries exitCode
+ *
+ * `onActivity` fires on every chunk received, keepalive pings included, so the
+ * caller can tell a live-but-quiet stream (Claude thinking) from a dead socket.
  */
-async function readEventStream(response, handlers) {
+async function readEventStream(response, handlers, onActivity) {
   if (!response.body) throw new Error('This browser cannot read streaming responses.')
 
   const reader = response.body.getReader()
@@ -169,6 +172,7 @@ async function readEventStream(response, handlers) {
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
+    onActivity?.()
     buffer += decoder.decode(value, { stream: true })
 
     let split
@@ -214,6 +218,7 @@ export async function streamChat({
   conversationId,
   handlers = {},
   signal,
+  onActivity,
 }) {
   const response = await fetch(`${baseUrl(settings)}/api/chat`, {
     method: 'POST',
@@ -230,7 +235,7 @@ export async function streamChat({
   })
 
   if (!response.ok) throw await errorFromResponse(response)
-  await readEventStream(response, handlers)
+  await readEventStream(response, handlers, onActivity)
 }
 
 /**
@@ -241,9 +246,9 @@ export async function streamChat({
  * Throws with `error.status === 404` when the run is gone (finished long enough
  * ago that the bridge dropped it).
  */
-export async function resumeChat({ settings, runId, offset = 0, handlers = {}, signal }) {
+export async function resumeChat({ settings, runId, offset = 0, handlers = {}, signal, onActivity }) {
   const url = `${baseUrl(settings)}/api/stream?runId=${encodeURIComponent(runId)}&offset=${offset}`
   const response = await fetch(url, { headers: authHeaders(settings), signal })
   if (!response.ok) throw await errorFromResponse(response)
-  await readEventStream(response, handlers)
+  await readEventStream(response, handlers, onActivity)
 }
