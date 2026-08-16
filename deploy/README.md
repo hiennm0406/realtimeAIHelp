@@ -4,8 +4,27 @@ Goal: the agent keeps running even when your own PC is off. Nothing here changes
 the app — you just move `bridge/server.py` from your PC to an always-on Linux
 box, run it as a service, and give it a stable HTTPS URL.
 
-Tested against Ubuntu 22.04/24.04 (x86 or ARM). Commands assume a user named
-`claude`; adjust paths if you use another.
+Tested against Ubuntu 22.04/24.04 (x86 or ARM).
+
+---
+
+## Fast path: one script
+
+After you can SSH into the VM (steps 0 below), you can skip the manual steps and
+run the bootstrap script, which installs everything, clones the app, writes the
+config, and starts the bridge as a boot-time service:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hiennm0406/realtimeAIHelp/main/deploy/setup.sh -o setup.sh
+ANTHROPIC_API_KEY=sk-ant-xxx SITE_ORIGIN=https://your-site.netlify.app bash setup.sh
+```
+
+Then give it a public URL with Tailscale Funnel (step 5, Option B) and point the
+site at it (step 6). The manual steps below are the same thing spelled out, plus
+the Cloudflare-tunnel alternative.
+
+> The steps below assume the default `ubuntu` user Oracle creates. The script
+> uses whatever user you run it as.
 
 ---
 
