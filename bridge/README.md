@@ -161,7 +161,36 @@ Two limits worth knowing before relying on it:
 | `run_max_seconds` | `21600` | Absolute backstop, in case a run prints forever. The idle timeout is the real guard. |
 | `run_retention_seconds` | `604800` | How long a finished run's transcript stays **on disk**, and so how long it stays reconnectable. A week by default — it is only a file. |
 | `run_memory_seconds` | `600` | How long a finished run's frames stay in **RAM** after last use. Past this they are dropped and re-read from the transcript on demand. |
-| `max_body_bytes` | `4194304` | Largest request body accepted, so a bogus `Content-Length` cannot turn into an unbounded allocation. |
+| `max_body_bytes` | `33554432` | Largest request body accepted, so a bogus `Content-Length` cannot turn into an unbounded allocation. Attached images travel as base64, which inflates them by a third, so this sits above the image limits below. |
+
+## Image attachments
+
+`POST /api/chat` takes an optional `images` array alongside the prompt:
+
+```json
+{ "prompt": "what is wrong here?",
+  "images": [{ "mediaType": "image/png", "data": "<base64>" }] }
+```
+
+They are forwarded to Claude Code as `stream-json` content blocks, so the model
+**sees** them directly — no tool call, and nothing is written to disk, so the
+confinement rules are untouched by this feature. A message with images and no
+prompt is valid: sending a screenshot is a complete request on its own.
+
+PNG, JPEG, GIF and WebP only, max 8 per message, 8MB each and 24MB in total.
+The declared `mediaType` must match the file's magic bytes — that field is what
+tells the API how to decode the payload, so a mismatch is refused rather than
+forwarded. SVG is rejected outright: it is markup that can carry script, and the
+API does not accept it anyway.
+
+The bytes are held only until they have been written to Claude Code's stdin, and
+the transcript records their shape (`{mediaType, bytes}`) rather than their
+contents — otherwise every reconnectable run would pin its attachments in RAM
+for a week and bloat `runs/` by the size of every screenshot ever sent.
+
+The browser downscales to 1568px before uploading, which is where Claude
+downsamples anyway, so the limits above are far more generous than normal use
+needs.
 
 ## Background runs
 

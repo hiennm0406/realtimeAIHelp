@@ -292,6 +292,7 @@ async function errorFromResponse(response) {
 export async function streamChat({
   settings,
   prompt,
+  images = [],
   runId,
   sessionId,
   conversationId,
@@ -305,6 +306,9 @@ export async function streamChat({
     signal,
     body: JSON.stringify({
       prompt,
+      // Base64 image blocks. Omitted entirely when there is nothing attached,
+      // so a text-only request is byte-for-byte what it always was.
+      images: images.length ? images : undefined,
       runId: runId || undefined,
       sessionId: sessionId || undefined,
       conversationId: conversationId || undefined,

@@ -75,6 +75,7 @@ re-enter.
 | --- | --- |
 | **Thinking** | Collapsed by default, expands to the reasoning. Empty when the model returns no reasoning text. |
 | **Tool calls** | Name plus a one-line preview; expand for full JSON input and output. Colour-coded running / ok / error. |
+| **Images** | Attach with the 🖼 button, paste from the clipboard, or drag onto the composer — up to 8 a message. Claude sees them directly, the same as pasting a screenshot into the terminal, so you can ask about a design, an error dialog, or a photo. Sending an image with no text is fine. The full-size copy goes to the model; the chat keeps a thumbnail, so a conversation full of screenshots still fits in the browser's storage. |
 | **Usage** | Per turn: input (fresh + cached), output, thinking tokens, web searches, cost, wall time. Running total in the header. |
 | **Context** | How much of the model's context window the prompt is using, per turn and in the header. Derived from `modelUsage.contextWindow` and the turn's prompt tokens. Turns amber under 35% left, red under 15%. |
 | **History** | **Chats** lists past conversations; click one to reopen it and keep talking on the same Claude Code session. Stored in the browser, so it is per-device and never leaves it. |

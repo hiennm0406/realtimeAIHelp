@@ -104,8 +104,15 @@ function push(convo, item) {
   return convo.timeline[convo.timeline.length - 1]
 }
 
-export function addUserMessage(convo, text) {
-  return push(convo, { kind: 'user', text })
+/**
+ * `images` are thumbnails, not the bytes that were sent. The full-size copies
+ * went to the model and are not kept: the transcript lives in localStorage,
+ * where a few full-resolution screenshots would evict the rest of the history.
+ */
+export function addUserMessage(convo, text, images = []) {
+  const item = { kind: 'user', text }
+  if (images.length) item.images = images
+  return push(convo, item)
 }
 
 export function addLocalError(convo, text) {

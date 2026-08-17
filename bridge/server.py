@@ -24,6 +24,7 @@ Stdlib only - no pip install required.
 Config lives in bridge/config.json and is created on first run.
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -120,9 +121,28 @@ DEFAULT_CONFIG = {
     # ever streamed. Replay still works - it just reads the file.
     "run_memory_seconds": 600,
     # Hard cap on a request body, in bytes. Guards against a bogus (or hostile)
-    # Content-Length turning into an unbounded allocation.
-    "max_body_bytes": 4 * 1024 * 1024,
+    # Content-Length turning into an unbounded allocation. Attached images ride
+    # in the body as base64, which inflates them by a third, so this sits well
+    # above the image limits below.
+    "max_body_bytes": 32 * 1024 * 1024,
 }
+
+# Image attachments. The API takes these as base64 content blocks, so the bytes
+# pass through the bridge rather than being written anywhere - nothing lands on
+# disk, and the confinement rules are untouched by this feature.
+#
+# The magic numbers are checked because `media_type` is what tells the API how
+# to decode the payload: a mismatch is either a broken client or someone probing
+# what the bridge will forward.
+ALLOWED_IMAGE_TYPES = {
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "image/webp": (b"RIFF",),
+}
+MAX_IMAGES = 8
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_IMAGES_TOTAL_BYTES = 24 * 1024 * 1024
 
 # Must match `claude --permission-mode` exactly. A value missing from this set is
 # silently dropped rather than passed through, so the bridge would fall back to
@@ -414,6 +434,96 @@ def write_policy_file(cwd):
     return path
 
 
+def sanitize_images(raw):
+    """Validate attachments from the browser, or raise ValueError.
+
+    Everything is re-encoded from the decoded bytes rather than forwarded as
+    received, so whitespace, padding quirks and `data:` envelopes cannot reach
+    the API as-is.
+    """
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("images must be a list")
+    if len(raw) > MAX_IMAGES:
+        raise ValueError("at most %d images per message" % MAX_IMAGES)
+
+    images = []
+    total = 0
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError("each image must be an object")
+
+        media = str(entry.get("mediaType") or "").strip().lower()
+        if media not in ALLOWED_IMAGE_TYPES:
+            raise ValueError("unsupported image type: %s" % (media or "(missing)"))
+
+        data = entry.get("data")
+        if not isinstance(data, str) or not data:
+            raise ValueError("image data must be a base64 string")
+        if data.startswith("data:"):
+            _, _, data = data.partition(",")
+        data = "".join(data.split())
+
+        try:
+            blob = base64.b64decode(data, validate=True)
+        except Exception:
+            raise ValueError("image data is not valid base64")
+        if not blob:
+            raise ValueError("image is empty")
+        if len(blob) > MAX_IMAGE_BYTES:
+            raise ValueError("each image must be under %dMB" % (MAX_IMAGE_BYTES // 1048576))
+
+        total += len(blob)
+        if total > MAX_IMAGES_TOTAL_BYTES:
+            raise ValueError(
+                "attachments must total under %dMB" % (MAX_IMAGES_TOTAL_BYTES // 1048576)
+            )
+
+        if not any(blob.startswith(sig) for sig in ALLOWED_IMAGE_TYPES[media]):
+            raise ValueError("the bytes do not look like %s" % media)
+        # RIFF alone is a container - WebP is identified by the form type.
+        if media == "image/webp" and blob[8:12] != b"WEBP":
+            raise ValueError("the bytes do not look like image/webp")
+
+        images.append(
+            {"mediaType": media, "data": base64.b64encode(blob).decode("ascii")}
+        )
+    return images
+
+
+def stdin_payload(prompt, images):
+    """What gets handed to Claude Code on stdin.
+
+    Plain text when there is nothing attached - that is the path every run took
+    before images existed, and it stays byte-for-byte the same. With
+    attachments, the prompt becomes one stream-json user message whose content
+    is the images followed by the text, which is how the model receives them as
+    something it can see rather than a path it would have to open.
+    """
+    if not images:
+        return prompt
+
+    content = [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image["mediaType"],
+                "data": image["data"],
+            },
+        }
+        for image in images
+    ]
+    # Text last: the images are what the question refers to, so they should
+    # already be in view by the time the model reads it. An empty prompt is
+    # allowed - sending a screenshot on its own is a complete request.
+    if prompt:
+        content.append({"type": "text", "text": prompt})
+    message = {"type": "user", "message": {"role": "user", "content": content}}
+    return json.dumps(message) + "\n"
+
+
 def build_command(payload):
     cmd = [
         CLAUDE_BIN,
@@ -473,6 +583,12 @@ def build_command(payload):
     if session_id:
         cmd += ["--resume", session_id]
 
+    # Images can only be expressed as content blocks, which means stdin has to
+    # carry a JSON message instead of raw text. Only switched on when there is
+    # something to attach, so text-only runs keep the simpler path.
+    if payload.get("images"):
+        cmd += ["--input-format", "stream-json"]
+
     return cmd
 
 
@@ -491,9 +607,18 @@ class Run:
     output the bridge has ever streamed in memory.
     """
 
-    def __init__(self, run_id, prompt, cwd, command, conversation_id=""):
+    def __init__(self, run_id, prompt, cwd, command, conversation_id="", images=None):
         self.id = run_id
         self.prompt = prompt
+        # Held only until stdin has been written. They are megabytes each, and
+        # the transcript deliberately never records them, so keeping them for
+        # the life of the run would mean a finished run pinning its attachments
+        # in RAM for as long as it stays reconnectable - a week, by default.
+        self.images = images or []
+        # Survives the list being dropped after stdin, and is all the title
+        # needs. Restored from the transcript's meta line, so a run reloaded
+        # after a bridge restart is still labelled.
+        self.image_count = len(self.images)
         self.cwd = cwd
         self.command = command
         self.conversation_id = conversation_id
@@ -529,6 +654,13 @@ class Run:
                     "command": self.command,
                     "conversationId": self.conversation_id,
                     "startedAt": self.started_at,
+                    # Shape only. Writing the base64 here would multiply the
+                    # transcript's size by the attachments on every turn, for
+                    # data the browser already holds and re-renders itself.
+                    "images": [
+                        {"mediaType": i["mediaType"], "bytes": (len(i["data"]) * 3) // 4}
+                        for i in self.images
+                    ],
                 }
             )
         except Exception:
@@ -671,6 +803,10 @@ class Run:
         run = cls.__new__(cls)  # bypass __init__ so we don't reopen the log
         run.id = meta.get("runId") or os.path.splitext(os.path.basename(path))[0]
         run.prompt = meta.get("prompt", "")
+        # Bytes were never written to the transcript, only their shape - which
+        # is all a reloaded run needs to label itself.
+        run.images = []
+        run.image_count = len(meta.get("images") or [])
         run.cwd = meta.get("cwd", "")
         run.command = meta.get("command", [])
         run.conversation_id = meta.get("conversationId", "")
@@ -735,6 +871,11 @@ class Run:
 
     def title(self):
         line = " ".join((self.prompt or "").split())
+        if not line:
+            # Image-only turns are legitimate, and an entry with a blank title
+            # reads as a broken run in /api/runs.
+            count = self.image_count
+            return "(%d image%s)" % (count, "" if count == 1 else "s") if count else ""
         return line[:120]
 
     def summary(self):
@@ -818,11 +959,18 @@ def run_worker(run):
         threading.Thread(target=pump_stderr, daemon=True).start()
 
         # Hand the prompt over on stdin so long prompts and quotes survive.
+        # With attachments this is a stream-json message carrying the image
+        # bytes, which is why the pipes above had to be draining already: it can
+        # be megabytes, far past what the pipe buffer holds.
         try:
-            proc.stdin.write(run.prompt)
+            proc.stdin.write(stdin_payload(run.prompt, run.images))
             proc.stdin.close()
         except Exception as exc:
             run.append("error", {"type": "error", "message": "could not send prompt: %s" % exc})
+        finally:
+            # Sent, and never needed again - the model has them now and the
+            # transcript stores only their shape.
+            run.images = []
 
         # Back-compat: honor a legacy "run_timeout_seconds" as the idle timeout.
         idle_timeout = float(
@@ -1189,8 +1337,17 @@ class Bridge(BaseHTTPRequestHandler):
 
     def start_chat(self, payload):
         prompt = (payload.get("prompt") or "").strip()
-        if not prompt:
+        try:
+            images = sanitize_images(payload.get("images"))
+        except ValueError as exc:
+            return self.send_json(400, {"error": str(exc)})
+        # An image on its own is a complete request - "what is this?" is implied
+        # by sending it - so only a message with neither is empty.
+        if not prompt and not images:
             return self.send_json(400, {"error": "prompt is required"})
+        # build_command reads this to decide the input format, so it has to see
+        # the validated list rather than whatever the client sent.
+        payload["images"] = images
         if not CLAUDE_BIN:
             return self.send_json(
                 500,
@@ -1232,6 +1389,7 @@ class Bridge(BaseHTTPRequestHandler):
             cwd,
             command,
             conversation_id=(payload.get("conversationId") or "").strip(),
+            images=images,
         )
 
         # Registering the run and honouring a pre-emptive Stop happen under one

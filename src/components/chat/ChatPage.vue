@@ -134,7 +134,17 @@
 
       <template v-for="item in convo.timeline" :key="item.id">
         <div v-if="item.kind === 'user'" class="turn turn--user" :data-turn-id="item.id">
-          <div class="bubble">{{ item.text }}</div>
+          <div v-if="item.images && item.images.length" class="bubble__shots">
+            <img
+              v-for="(shot, i) in item.images"
+              :key="i"
+              class="shot"
+              :src="shot.thumb"
+              :alt="shot.name || 'attached image'"
+              :title="shot.name"
+            />
+          </div>
+          <div v-if="item.text" class="bubble">{{ item.text }}</div>
         </div>
 
         <div v-else-if="item.kind === 'text'" class="turn turn--claude" :data-turn-id="item.id">
@@ -185,35 +195,82 @@
       ↑
     </button>
 
-    <form class="chat__composer card" @submit.prevent="send">
-      <textarea
-        ref="input"
-        v-model="draft"
-        class="chat__input"
-        rows="1"
-        placeholder="Message Claude Code…  (Enter to send, Shift+Enter for a new line)"
-        :disabled="!configured"
-        @keydown="onKeydown"
-        @input="autosize"
-        @focus="onInputFocus"
-      ></textarea>
+    <form
+      class="chat__composer card"
+      :class="{ 'chat__composer--drop': dragging }"
+      @submit.prevent="send"
+      @dragover.prevent="onDragOver"
+      @dragleave="onDragLeave"
+      @drop.prevent="onDrop"
+    >
+      <div v-if="attachments.length || attachError" class="tray">
+        <div v-if="attachError" class="tray__err">{{ attachError }}</div>
+        <div v-if="attachments.length" class="tray__items">
+          <div v-for="shot in attachments" :key="shot.id" class="tray__item">
+            <img class="tray__thumb" :src="shot.thumb" :alt="shot.name" />
+            <button
+              class="tray__drop"
+              type="button"
+              :title="`Remove ${shot.name}`"
+              @click="removeAttachment(shot.id)"
+            >
+              ✕
+            </button>
+            <span class="tray__size">{{ formatBytes(shot.bytes) }}</span>
+          </div>
+          <div v-if="preparing" class="tray__item tray__item--busy">…</div>
+        </div>
+      </div>
 
-      <button
-        v-if="running"
-        class="btn chat__stop"
-        type="button"
-        @click="stop"
-      >
-        Stop
-      </button>
-      <button
-        v-else
-        class="btn chat__send"
-        type="submit"
-        :disabled="!configured || !draft.trim()"
-      >
-        Send
-      </button>
+      <div class="chat__row">
+        <button
+          class="btn chat__attach"
+          type="button"
+          title="Attach an image"
+          :disabled="!configured || attachments.length >= maxImages"
+          @click="openPicker"
+        >
+          <span aria-hidden="true">🖼</span>
+        </button>
+        <input
+          ref="picker"
+          class="chat__picker"
+          type="file"
+          :accept="acceptedTypes"
+          multiple
+          @change="onPicked"
+        />
+
+        <textarea
+          ref="input"
+          v-model="draft"
+          class="chat__input"
+          rows="1"
+          placeholder="Message Claude Code…  (Enter to send, Shift+Enter for a new line)"
+          :disabled="!configured"
+          @keydown="onKeydown"
+          @input="autosize"
+          @focus="onInputFocus"
+          @paste="onPaste"
+        ></textarea>
+
+        <button
+          v-if="running"
+          class="btn chat__stop"
+          type="button"
+          @click="stop"
+        >
+          Stop
+        </button>
+        <button
+          v-else
+          class="btn chat__send"
+          type="submit"
+          :disabled="!configured || (!draft.trim() && !attachments.length)"
+        >
+          Send
+        </button>
+      </div>
     </form>
     </div>
   </div>
@@ -254,6 +311,13 @@ import {
   saveConversation,
 } from '../../lib/history.js'
 import { formatCost, formatTokens } from '../../lib/format.js'
+import {
+  ACCEPTED_TYPES,
+  MAX_IMAGES,
+  imageFilesFrom,
+  prepareImage,
+  toWirePayload,
+} from '../../lib/images.js'
 
 const STATUS_LABELS = {
   starting: 'Starting…',
@@ -280,6 +344,13 @@ export default {
       conversationId: newConversationId(),
       history: [],
       draft: '',
+      // Images staged for the next message. Cleared on send, and never written
+      // to history in this form - only their thumbnails travel into the
+      // transcript.
+      attachments: [],
+      attachError: '',
+      preparing: false,
+      dragging: false,
       running: false,
       runId: '',
       controller: null,
@@ -295,6 +366,12 @@ export default {
     }
   },
   computed: {
+    acceptedTypes() {
+      return ACCEPTED_TYPES.join(',')
+    },
+    maxImages() {
+      return MAX_IMAGES
+    },
     configured() {
       // The bridge address is fixed at build time, so a device is configured as
       // soon as it has a token.
@@ -367,6 +444,83 @@ export default {
   methods: {
     formatCost,
     formatTokens,
+
+    formatBytes(bytes) {
+      const kb = bytes / 1024
+      return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
+    },
+
+    openPicker() {
+      this.$refs.picker?.click()
+    },
+
+    onPicked(event) {
+      this.addFiles(Array.from(event.target.files || []))
+      // Reset, or picking the same file twice in a row fires no change event.
+      event.target.value = ''
+    },
+
+    onPaste(event) {
+      const files = imageFilesFrom(event.clipboardData)
+      if (!files.length) return
+      // Only swallow the paste once we know there is an image in it, so pasting
+      // text still behaves normally.
+      event.preventDefault()
+      this.addFiles(files)
+    },
+
+    onDragOver() {
+      if (this.configured) this.dragging = true
+    },
+
+    onDragLeave() {
+      this.dragging = false
+    },
+
+    onDrop(event) {
+      this.dragging = false
+      this.addFiles(imageFilesFrom(event.dataTransfer))
+    },
+
+    /**
+     * Decode, downscale and stage files.
+     *
+     * Each one is handled on its own so a single unreadable file reports itself
+     * without discarding the rest of the selection - dropping a folder of
+     * screenshots should not be all-or-nothing.
+     */
+    async addFiles(files) {
+      if (!files.length || !this.configured) return
+      this.attachError = ''
+
+      const room = MAX_IMAGES - this.attachments.length
+      if (room <= 0) {
+        this.attachError = `At most ${MAX_IMAGES} images per message.`
+        return
+      }
+      const accepted = files.slice(0, room)
+      if (files.length > room) {
+        this.attachError = `Only the first ${room} of ${files.length} were added (max ${MAX_IMAGES}).`
+      }
+
+      this.preparing = true
+      try {
+        for (const file of accepted) {
+          try {
+            this.attachments.push(await prepareImage(file))
+          } catch (error) {
+            this.attachError = error.message
+          }
+        }
+      } finally {
+        this.preparing = false
+      }
+    },
+
+    removeAttachment(id) {
+      this.attachments = this.attachments.filter((a) => a.id !== id)
+      this.attachError = ''
+    },
 
     applySettings(next) {
       Object.assign(this.settings, next)
@@ -744,10 +898,22 @@ export default {
 
     async send() {
       const prompt = this.draft.trim()
-      if (!prompt || this.running || !this.configured) return
+      const attachments = this.attachments
+      // An image on its own is a complete message; the model answers the
+      // picture. Only a turn with neither text nor images is empty.
+      if ((!prompt && !attachments.length) || this.running || !this.configured) return
 
-      addUserMessage(this.convo, prompt)
+      // Sent to the model at full size; the transcript keeps thumbnails, which
+      // is what makes a conversation with screenshots still fit in localStorage.
+      const images = toWirePayload(attachments)
+      addUserMessage(
+        this.convo,
+        prompt,
+        attachments.map((a) => ({ thumb: a.thumb, name: a.name }))
+      )
       this.draft = ''
+      this.attachments = []
+      this.attachError = ''
       this.$nextTick(this.autosize)
       this.scrollToEnd()
       // Save immediately so the chat appears in history even if the run fails.
@@ -774,6 +940,7 @@ export default {
           streamChat({
             settings: this.settings,
             prompt,
+            images,
             runId,
             sessionId,
             conversationId,
@@ -1160,8 +1327,30 @@ export default {
 
 .turn--user {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   margin: 16px 0 10px;
+}
+
+.bubble__shots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 78%;
+}
+
+.shot {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  /* The thumbnail is a downscale of what was sent, so let it keep its shape
+     rather than cropping to a square - a screenshot cropped square is
+     unreadable. */
+  object-fit: contain;
+  background: var(--panel-2);
 }
 
 .bubble {
@@ -1227,9 +1416,98 @@ export default {
 
 .chat__composer {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 8px;
   padding: 10px;
+}
+
+.chat__composer--drop {
+  border-color: var(--accent);
+}
+
+.chat__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat__attach {
+  flex: none;
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.chat__picker {
+  display: none;
+}
+
+.tray {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tray__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tray__item {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.tray__item--busy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.tray__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tray__drop {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.tray__size {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
+}
+
+.tray__err {
+  font-size: 12px;
+  color: var(--bad);
 }
 
 .chat__input {
