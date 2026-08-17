@@ -33,9 +33,31 @@ if (-not (Test-Path $bridgeJs)) { throw "Not a checkout of this repo: $bridgeJs 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
 # --- python ------------------------------------------------------------------
-$python = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $python) { $python = (Get-Command py -ErrorAction SilentlyContinue).Source }
-if (-not $python) { throw 'Python not found on PATH.' }
+# `python` on PATH is often the Microsoft Store alias: it resolves, then exits
+# with "Python was not found" instead of running anything. Get-Command cannot
+# tell the two apart, so each candidate has to prove itself by printing a
+# version.
+function Resolve-Python {
+  $candidates = @()
+  $candidates += (Get-Command python -ErrorAction SilentlyContinue | ForEach-Object Source)
+  $candidates += (Get-Command python3 -ErrorAction SilentlyContinue | ForEach-Object Source)
+  $candidates += Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending | ForEach-Object FullName
+  $candidates += 'C:\Python313\python.exe', 'C:\Python312\python.exe'
+
+  foreach ($c in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+    if ($c -like '*\WindowsApps\*') { continue }  # the Store alias
+    if (-not (Test-Path $c)) { continue }
+    $version = & $c --version 2>&1
+    if ($LASTEXITCODE -eq 0 -and $version -match 'Python 3') { return $c }
+  }
+  # `py` last: it is a launcher, so it works but hides which interpreter ran.
+  if (Get-Command py -ErrorAction SilentlyContinue) { return 'py' }
+  return $null
+}
+
+$python = Resolve-Python
+if (-not $python) { throw 'No working Python 3 found (the Microsoft Store alias does not count).' }
 
 $cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
 if (-not $cloudflared) {
@@ -59,8 +81,11 @@ Start-Sleep -Milliseconds 1200
 # --- bridge ------------------------------------------------------------------
 Step 'Starting the bridge'
 $env:PYTHONUNBUFFERED = '1'
+$bridgeLog = Join-Path $logDir 'bridge.log'
 Start-Process -FilePath $python -ArgumentList 'bridge/server.py' `
-  -WorkingDirectory $repo -WindowStyle Hidden
+  -WorkingDirectory $repo -WindowStyle Hidden `
+  -RedirectStandardError $bridgeLog -RedirectStandardOutput "$bridgeLog.out"
+Say "logging to $bridgeLog"
 
 # Poll rather than sleep a fixed amount: an unauthenticated 401 already proves
 # the listener is up, and is the fastest honest signal we can get without
@@ -75,7 +100,11 @@ foreach ($i in 1..30) {
     Start-Sleep -Milliseconds 500
   }
 }
-if (-not $up) { throw 'Bridge did not come up on 127.0.0.1:8787.' }
+if (-not $up) {
+  $why = (Get-Content $bridgeLog -Raw -ErrorAction SilentlyContinue), `
+         (Get-Content "$bridgeLog.out" -Raw -ErrorAction SilentlyContinue) -join "`n"
+  throw "Bridge did not come up on 127.0.0.1:8787.`n$($why.Trim())"
+}
 Say 'listening on 127.0.0.1:8787'
 
 # --- tunnel ------------------------------------------------------------------
