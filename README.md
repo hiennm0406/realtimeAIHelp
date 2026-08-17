@@ -45,15 +45,19 @@ Requires Node 22+ (see `.nvmrc`). For Netlify, connect the repo — `netlify.tom
 already sets the build command and publish directory. `public/_redirects` handles
 SPA routing.
 
-**4. Open the site → Settings**, paste the tunnel URL and token, hit
-**Test connection**.
+**4. Open the site → Settings**, paste the token, hit **Test connection**. The
+bridge address is baked into the build (see below), so that is the only field.
 
-### Changing the prefilled bridge URL
+### Changing the bridge URL
 
-Settings starts with a bridge URL already filled in, so a new device only needs
-the token. It is baked in at build time, and a quick tunnel changes hostname on
-every restart — when that happens, set `VITE_BRIDGE_URL` instead of editing the
-source:
+The bridge address is a **build-time constant**, not a per-device setting — a
+device only ever needs the token, and Settings shows the address read-only. That
+also means a stale address cannot get stuck in one phone's local storage.
+
+The flip side: changing it means rebuilding. A quick tunnel hands out a new
+hostname on every restart, so prefer a named tunnel or Tailscale Funnel if you
+want to set this once. To change it, set `VITE_BRIDGE_URL` rather than editing
+the source:
 
 ```
 VITE_BRIDGE_URL=https://your-tunnel.trycloudflare.com npm run build
@@ -62,9 +66,8 @@ VITE_BRIDGE_URL=https://your-tunnel.trycloudflare.com npm run build
 On Netlify: **Site settings → Environment variables**, add `VITE_BRIDGE_URL`,
 redeploy. With no variable set it falls back to the value in `src/lib/bridge.js`.
 
-The prefill only applies to devices that have never saved settings — the browser
-remembers whatever you last typed, so on a device you already configured you
-have to edit the field by hand.
+Every device picks the new address up on its next page load; there is nothing to
+re-enter.
 
 ## What the chat shows
 
@@ -76,7 +79,7 @@ have to edit the field by hand.
 | **Context** | How much of the model's context window the prompt is using, per turn and in the header. Derived from `modelUsage.contextWindow` and the turn's prompt tokens. Turns amber under 35% left, red under 15%. |
 | **History** | **Chats** lists past conversations; click one to reopen it and keep talking on the same Claude Code session. Stored in the browser, so it is per-device and never leaves it. |
 | **Session** | Follow-ups resume the same Claude Code session, so it keeps its context. **New** starts a fresh one. |
-| **Background** | Runs live on the bridge, not in the tab. Close the page or lose signal and the agent keeps working; reopen the chat (or switch back to the tab) and it reconnects, replays what you missed, and shows the finished answer. Each run is also saved to disk (`bridge/runs/`), so it survives a bridge restart too. Runs stay reconnectable for a retention window (`run_retention_seconds`, default 6h). **Stop** is the only thing that ends a run early. After pulling new code, restart `bridge/server.py` for changes to apply. |
+| **Background** | Runs live on the bridge, not in the tab. Close the page or lose signal and the agent keeps working; reopen the chat (or switch back to the tab) and it reconnects, replays what you missed, and shows the finished answer. A dropped connection is retried through a five-minute outage before the UI gives up, and picked back up the moment the device is online again. Each run is saved to disk (`bridge/runs/`), so it survives a bridge restart too, and stays reconnectable for `run_retention_seconds` — a week by default. **Stop** is the only thing that ends a run early. After pulling new code, restart `bridge/server.py` for changes to apply. |
 
 Settings let you pick the model, effort level, and permission mode per device, and
 hide thinking or tool I/O if you want a plainer transcript.

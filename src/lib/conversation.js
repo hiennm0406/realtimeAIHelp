@@ -18,6 +18,11 @@ export function createConversation() {
     timeline: [],
     blocks: {}, // `${messageId}#${index}` -> timeline item
     tools: {}, // tool_use id -> timeline item
+    // Declared here rather than sprung into existence on the first
+    // message_start, so that Object.assign(convo, createConversation()) - how a
+    // new chat is started - actually clears it instead of leaving the previous
+    // conversation's message id behind.
+    currentMessageId: '',
     sessionId: '',
     model: '',
     cwd: '',

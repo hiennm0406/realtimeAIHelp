@@ -13,6 +13,10 @@ WorkingDirectory=/home/claude/realtimeAIHelp
 #   sudo install -m 600 -o claude -g claude deploy/claude-bridge.env.example /etc/claude-bridge.env
 #   sudo nano /etc/claude-bridge.env
 EnvironmentFile=/etc/claude-bridge.env
+# Without this, Python block-buffers stdout when it is a pipe rather than a
+# terminal - so `journalctl -u claude-bridge` stays empty for a long time and
+# the startup banner (including the access token) never appears.
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 bridge/server.py
 Restart=always
 RestartSec=3

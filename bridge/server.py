@@ -7,10 +7,15 @@ browser as Server-Sent Events, so the web UI can render the same information the
 terminal shows: thinking, tool calls, tool results, token usage and cost.
 
 Each run lives in a background worker that is *independent of the browser
-connection*. Its events are buffered in memory, so a client can disconnect (close
-the tab, lose signal, walk away) and the agent keeps working. When the client
-comes back it reconnects with `GET /api/stream?runId=...`, replays everything it
-missed, and keeps tailing until the run finishes.
+connection*. Its events are streamed to a transcript under bridge/runs/, so a
+client can disconnect (close the tab, lose signal, walk away) - and the bridge
+itself can restart - while the agent keeps working. When the client comes back it
+replays everything it missed from that transcript (`GET /api/run`, or
+`GET /api/stream` for SSE) and keeps catching up until the run finishes.
+
+The transcript is the source of truth. Frames are cached in memory while a run is
+live and for a short while after, then dropped and re-read on demand, so a bridge
+that has been up for days is not still holding every byte it ever streamed.
 
 Stdlib only - no pip install required.
 
@@ -19,9 +24,11 @@ Stdlib only - no pip install required.
 Config lives in bridge/config.json and is created on first run.
 """
 
+import hashlib
 import json
 import os
 import queue
+import re
 import secrets
 import shutil
 import signal
@@ -63,9 +70,31 @@ DEFAULT_CONFIG = {
     # Adds --dangerously-skip-permissions. Needed by some setups for tools to run
     # with no prompt at all in headless mode. Same trust requirement as above.
     "dangerously_skip_permissions": True,
-    # Tools the browser is allowed to use. Empty list = every tool Claude Code has
-    # (Bash, Read, Write, Edit, WebSearch, WebFetch, Task, ...).
+    # Tools that may run WITHOUT a prompt. Empty list = every tool Claude Code
+    # has (Bash, Read, Write, Edit, WebSearch, WebFetch, Task, ...). Entries can
+    # narrow by argument too, e.g. "Bash(git status:*)" or "Write(./data/**)".
+    # Headless runs have nobody to answer a prompt, so with a non-empty list
+    # anything outside it is effectively refused.
     "allowed_tools": [],
+    # Tools refused outright, overriding anything in allowed_tools. Same syntax.
+    # This is the hard boundary: it is passed on the command line, so a run
+    # cannot lift it by editing a settings file in the working directory.
+    "disallowed_tools": [],
+    # Fence Read/Write/Edit into the working directory by generating deny rules
+    # for everything outside it (see confinement_rules). Without this a run can
+    # read any file the bridge's user can - other projects, ~/.ssh, and
+    # ~/.claude/.credentials.json included.
+    "confine_to_cwd": False,
+    # Subdirectories of the working directory that Write/Edit may touch, e.g.
+    # [".claude/skills", "data"]. Everything else in the project becomes
+    # read-only. Empty = the whole working directory is writable. Requires
+    # confine_to_cwd, since the rules travel in the same policy file.
+    "writable_paths": [],
+    # Permission modes the BROWSER may select in its Settings drawer. Empty (the
+    # default) means the client cannot change the mode at all and
+    # default_permission_mode always applies - otherwise anyone holding the
+    # token could pick "bypassPermissions" and grant themselves a shell.
+    "allowed_permission_modes": [],
     # CORS. Put your deployed site here once you know its URL, e.g.
     # ["https://your-site.netlify.app", "http://localhost:5173"]
     "allowed_origins": ["*"],
@@ -80,14 +109,26 @@ DEFAULT_CONFIG = {
     # Absolute backstop, in seconds. Ends even a run that keeps printing forever
     # (e.g. a tool stuck in a loop). Set high; the idle timeout is the real guard.
     "run_max_seconds": 21600,
-    # How long a finished run is kept (in memory and on disk) so a returning
-    # browser can still replay its result. After this, the run is dropped and its
-    # transcript file deleted; reconnecting to it returns 404. Raise it to step
-    # away for longer.
-    "run_retention_seconds": 21600,
+    # How long a finished run's transcript is kept ON DISK, and therefore how
+    # long a returning browser can still replay it. This is cheap - it is just a
+    # file - so it defaults to a week. After this the transcript is deleted and
+    # reconnecting to that run returns 404.
+    "run_retention_seconds": 604800,
+    # How long a finished run's frames stay in RAM after it is last touched.
+    # Beyond this they are dropped and re-read from the transcript on demand, so
+    # a long-lived bridge does not accumulate every byte of tool output it has
+    # ever streamed. Replay still works - it just reads the file.
+    "run_memory_seconds": 600,
+    # Hard cap on a request body, in bytes. Guards against a bogus (or hostile)
+    # Content-Length turning into an unbounded allocation.
+    "max_body_bytes": 4 * 1024 * 1024,
 }
 
+# Must match `claude --permission-mode` exactly. A value missing from this set is
+# silently dropped rather than passed through, so the bridge would fall back to
+# whatever Claude Code defaults to - the config would look applied but not be.
 PERMISSION_MODES = {
+    "default",
     "acceptEdits",
     "dontAsk",
     "plan",
@@ -97,6 +138,15 @@ PERMISSION_MODES = {
 }
 
 EFFORT_LEVELS = {"low", "medium", "high", "xhigh", "max"}
+
+# A run id is used as a filename, so it is restricted to hex. The browser picks
+# it (see start_chat) which is what lets Stop work before the first frame has
+# made it back over a slow tunnel.
+RUN_ID_RE = re.compile(r"^[0-9a-f]{16,64}$")
+
+# Most frames one /api/run snapshot will return. Replaying a long run is then a
+# sequence of modest responses instead of a single multi-megabyte one.
+MAX_SNAPSHOT_FRAMES = 400
 
 
 def load_config():
@@ -121,6 +171,11 @@ CONFIG = load_config()
 # runId -> Run. A run outlives the browser connection that started it, so this is
 # also what /api/stream reattaches to and what the reaper eventually clears.
 RUNS = {}
+# Run ids aborted before their Run object existed, mapped to when that happened.
+# The browser picks the id and can hit Stop while POST /api/chat is still in
+# flight, so without this the run would start anyway and keep working with
+# nobody watching it. Entries that were never claimed are pruned by the reaper.
+CANCELLED = {}
 RUNS_LOCK = threading.Lock()
 RUN_SLOTS = threading.BoundedSemaphore(max(1, int(CONFIG["max_concurrent"])))
 
@@ -170,6 +225,195 @@ def allowed_cwd(requested):
     return default
 
 
+def deny_forms(path):
+    """The same location spelled three ways.
+
+    Which spelling the matcher normalises to is undocumented, and guessing wrong
+    fails OPEN on the deny side, so all three go in.
+    """
+    trimmed = path.rstrip("\\/")
+    drive, rest = os.path.splitdrive(trimmed)
+    tail = rest.replace("\\", "/").strip("/")
+    if not tail:
+        return {"%s/**" % drive, "//%s/**" % drive[0].lower(), "%s\\**" % drive}
+    bases = ["%s/%s" % (drive, tail),
+             "//%s/%s" % (drive[0].lower(), tail),
+             "%s\\%s" % (drive, rest.strip("\\"))]
+    forms = set()
+    for base in bases:
+        sep = "\\" if "\\" in base else "/"
+        forms.add(base + sep + "**")   # everything under it, if it is a directory
+        forms.add(base)                # and the entry itself, if it is a file -
+        # `foo.json/**` never matches the file `foo.json`, so without the bare
+        # form a denied FILE was silently left writable.
+    return forms
+
+
+def siblings_of(keep_paths, roots):
+    """Every entry under `roots` that is not on the path to something in `keep_paths`.
+
+    This is how "everything except X" gets expressed in a deny list, which has
+    no negation: walk down from each root and block whatever is not an ancestor
+    of, or inside, something we mean to keep.
+    """
+    keep = set()
+    for target in keep_paths:
+        node = os.path.abspath(target)
+        while True:
+            keep.add(os.path.normcase(node))
+            parent = os.path.dirname(node)
+            if parent == node:
+                break
+            node = parent
+
+    blocked, queue_ = [], list(roots)
+    while queue_:
+        node = queue_.pop()
+        try:
+            entries = os.listdir(node)
+        except OSError:
+            continue
+        for name in entries:
+            child = os.path.join(node, name)
+            norm = os.path.normcase(child)
+            if norm in keep:
+                # On the way to something we keep - descend, unless this IS one
+                # of the kept roots, in which case everything below it stays.
+                if norm not in {os.path.normcase(os.path.abspath(k)) for k in keep_paths}:
+                    queue_.append(child)
+            else:
+                blocked.append(child)
+    return blocked
+
+
+def write_scope_rules(cwd, writable):
+    """Deny Write/Edit anywhere inside `cwd` except the `writable` subpaths."""
+    targets = [os.path.join(cwd, rel.replace("/", os.sep)) for rel in writable]
+    rules = []
+    for path in siblings_of(targets, [cwd]):
+        for form in sorted(deny_forms(path)):
+            rules.append("Write(%s)" % form)
+            rules.append("Edit(%s)" % form)
+    # The kept locations may not exist yet; create them, or a first write lands
+    # somewhere the walk never enumerated. An entry with a suffix is a file, so
+    # only its parent gets created - makedirs on "CLAUDE.md" would produce a
+    # directory by that name and quietly break the file it was meant to allow.
+    for target in targets:
+        directory = target if not os.path.splitext(target)[1] else os.path.dirname(target)
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError:
+            pass
+    return rules
+
+
+def confinement_rules(cwd):
+    """Deny rules that fence file tools into `cwd` and nothing else.
+
+    Claude Code's permission rules match paths on the DENY side but (as of
+    2.1.x on Windows) not on the ALLOW side, and a deny list cannot express
+    "everything except X". So the exception is enumerated instead: walk from
+    each drive root down to `cwd`, denying every sibling along the way. Nothing
+    outside the project tree is left reachable.
+
+    Regenerated on every start, so a folder created next to the project later is
+    covered too - a hand-written list would silently stop covering it.
+    """
+    cwd = os.path.abspath(cwd)
+    keep = []          # the project and each of its ancestors
+    node = cwd
+    while True:
+        keep.append(os.path.normcase(node))
+        parent = os.path.dirname(node)
+        if parent == node:
+            break
+        node = parent
+    keep = set(keep)
+
+    blocked = []
+    for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = letter + ":\\"
+        if not os.path.exists(root):
+            continue
+        if os.path.normcase(root) not in keep:
+            blocked.append(root)       # a whole drive the project is not on
+            continue
+        # The project's own drive: descend, blocking siblings at each level.
+        node = root
+        while os.path.normcase(node) != os.path.normcase(cwd):
+            try:
+                entries = os.listdir(node)
+            except OSError:
+                break
+            nxt = None
+            for name in entries:
+                child = os.path.join(node, name)
+                if os.path.normcase(child) in keep:
+                    nxt = child
+                else:
+                    blocked.append(child)
+            if nxt is None:
+                break
+            node = nxt
+
+    rules = []
+    for path in blocked:
+        trimmed = path.rstrip("\\/")
+        drive, rest = os.path.splitdrive(trimmed)
+        tail = rest.replace("\\", "/").strip("/")
+        # Three spellings of the same location, because which one the matcher
+        # normalises to is not documented and getting it wrong fails OPEN here.
+        forms = {
+            "%s/%s/**" % (drive, tail) if tail else "%s/**" % drive,
+            "//%s/%s/**" % (drive[0].lower(), tail) if tail else "//%s/**" % drive[0].lower(),
+            "%s\\%s\\**" % (drive, rest.strip("\\")) if tail else "%s\\**" % drive,
+        }
+        for tool in ("Read", "Write", "Edit"):
+            for form in sorted(forms):
+                rules.append("%s(%s)" % (tool, form))
+    return rules
+
+
+def policy_dir():
+    """Somewhere outside any project the agent might be pointed at."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "claude-bridge")
+
+
+def write_policy_file(cwd):
+    """Write the confinement deny rules to a settings file, return its path.
+
+    Raises on failure. That is deliberate: if the policy cannot be written, the
+    run must not start at all. Returning None here would have let it launch with
+    no confinement - the one outcome this whole mechanism exists to prevent.
+    """
+    os.makedirs(policy_dir(), exist_ok=True)
+    # Keyed by working directory so switching cwd cannot reuse another's rules.
+    # hashlib, not hash(): the built-in is salted per process, so the filename
+    # would change on every bridge restart and leave stale files behind.
+    digest = hashlib.sha256(os.path.normcase(os.path.abspath(cwd)).encode("utf-8")).hexdigest()[:16]
+    path = os.path.join(policy_dir(), "policy-%s.json" % digest)
+    deny = confinement_rules(cwd)
+    allow = []
+    writable = CONFIG.get("writable_paths") or []
+    if writable:
+        deny += write_scope_rules(cwd, writable)
+        # Some locations - `.claude/` above all - are gated by Claude Code even
+        # when nothing denies them, and a headless run has nobody to ask. An
+        # allow rule in the settings file lifts that. Note this only works via
+        # the settings file: the same pattern passed as --allowed-tools does not
+        # match, and the workspace must be trusted for allow rules to count.
+        for rel in writable:
+            target = os.path.join(cwd, rel.replace("/", os.sep))
+            for form in sorted(deny_forms(target)):
+                allow.append("Write(%s)" % form)
+                allow.append("Edit(%s)" % form)
+    body = {"permissions": {"deny": deny, "allow": allow}}
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(body, handle, indent=2)
+    return path
+
+
 def build_command(payload):
     cmd = [
         CLAUDE_BIN,
@@ -184,16 +428,42 @@ def build_command(payload):
     if model:
         cmd += ["--model", model]
 
-    mode = (payload.get("permissionMode") or CONFIG["default_permission_mode"]).strip()
+    # The browser may only pick a permission mode the operator has explicitly
+    # opened up. Without this a token holder could simply choose
+    # "bypassPermissions" in the Settings drawer and undo whatever restriction
+    # the bridge was configured with - the client would be deciding its own
+    # privileges. Empty list (the default) = the bridge's mode always wins.
+    requested = (payload.get("permissionMode") or "").strip()
+    offerable = CONFIG.get("allowed_permission_modes") or []
+    if requested and requested in PERMISSION_MODES and requested in offerable:
+        mode = requested
+    else:
+        mode = (CONFIG["default_permission_mode"] or "").strip()
     if mode in PERMISSION_MODES:
         cmd += ["--permission-mode", mode]
 
     if CONFIG.get("dangerously_skip_permissions") and mode == "bypassPermissions":
         cmd += ["--dangerously-skip-permissions"]
 
+    # Allow list: these run without a prompt. Anything outside it needs approval,
+    # and headless has nobody to approve, so it is refused.
     allowed_tools = CONFIG.get("allowed_tools") or []
     if allowed_tools:
         cmd += ["--allowed-tools"] + list(allowed_tools)
+
+    # Deny list: refused outright, even if something else would have allowed it.
+    # These live in argv, which the agent cannot rewrite - unlike a settings
+    # file sitting in the working directory.
+    disallowed_tools = list(CONFIG.get("disallowed_tools") or [])
+    if disallowed_tools:
+        cmd += ["--disallowed-tools"] + disallowed_tools
+
+    # Confinement is hundreds of rules - far past the 8191-character command
+    # line cmd.exe allows when claude_path is a .cmd shim - so it travels in a
+    # settings file instead. The file lives outside the working directory, which
+    # the same rules make unreachable, so a run cannot edit its own policy.
+    if CONFIG.get("confine_to_cwd"):
+        cmd += ["--settings", write_policy_file(allowed_cwd(payload.get("cwd")))]
 
     effort = (payload.get("effort") or "").strip()
     if effort in EFFORT_LEVELS:
@@ -209,9 +479,16 @@ def build_command(payload):
 class Run:
     """One Claude Code invocation, buffered so it can outlive any single client.
 
-    `frames` is an append-only list of (event, data) pairs - exactly the SSE
-    frames a client should receive. A frame's index in the list is its id, which
-    is how a reconnecting client asks for "everything after N".
+    Frames are an append-only sequence of (event, data) pairs - exactly the SSE
+    frames a client should receive. A frame's index is its id, which is how a
+    reconnecting client asks for "everything after N".
+
+    The transcript on disk is the source of truth; `frames` is only a cache of
+    it. A finished run that nobody has touched for a while has its frames
+    dropped from RAM (`release_memory`) and re-read from the file on the next
+    request (`frames_from`). That keeps replay working for as long as the
+    transcript is kept - days, if you like - without holding every byte of tool
+    output the bridge has ever streamed in memory.
     """
 
     def __init__(self, run_id, prompt, cwd, command, conversation_id=""):
@@ -221,12 +498,17 @@ class Run:
         self.command = command
         self.conversation_id = conversation_id
         self.frames = []
+        # Total frames ever appended. Stays correct after frames are evicted,
+        # so waiting/streaming logic never consults len(self.frames).
+        self.count = 0
+        self.in_memory = True
         self.cond = threading.Condition()
         self.done = False
         self.status = "running"
         self.proc = None
         self.started_at = time.time()
         self.finished_at = None
+        self.touched_at = time.time()
         self._log = None
         self._open_log()
 
@@ -265,11 +547,65 @@ class Run:
 
     def append(self, event, data):
         with self.cond:
-            self._write_log(
-                {"kind": "frame", "i": len(self.frames), "event": event, "data": data}
-            )
+            self._write_log({"kind": "frame", "i": self.count, "event": event, "data": data})
             self.frames.append((event, data))
+            self.count += 1
+            self.touched_at = time.time()
             self.cond.notify_all()
+
+    # ----- frame access, memory-backed or disk-backed -----
+
+    @staticmethod
+    def _read_frames(path):
+        """Every frame in a transcript, in order. Returns None if unreadable.
+
+        Deliberately forgiving: a transcript is written by a long-running
+        process and can be truncated or corrupted by a crash or a full disk. A
+        damaged one must degrade to "replays less", never to an exception that
+        takes a request - or the whole startup scan - down with it.
+        """
+        frames = []
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(obj, dict) and obj.get("kind") == "frame":
+                        frames.append((obj.get("event"), obj.get("data")))
+        except Exception:
+            return None
+        return frames
+
+    def frames_from(self, start, end=None):
+        """Frames [start, end). Reloads them from disk if they were evicted."""
+        with self.cond:
+            if not self.in_memory:
+                loaded = self._read_frames(self.path())
+                if loaded is None:
+                    # Transcript gone (deleted mid-flight?). Nothing to replay.
+                    return []
+                self.frames = loaded
+                self.count = max(self.count, len(loaded))
+                self.in_memory = True
+            self.touched_at = time.time()
+            stop = self.count if end is None else min(end, self.count)
+            return self.frames[max(0, start):stop]
+
+    def release_memory(self):
+        """Drop cached frames for a finished run whose transcript is on disk."""
+        with self.cond:
+            if not self.done or not self.in_memory or not self.frames:
+                return False
+            if not os.path.exists(self.path()):
+                return False  # nothing to reload from; keep them
+            self.frames = []
+            self.in_memory = False
+            return True
 
     def finish(self, status=None):
         with self.cond:
@@ -277,6 +613,7 @@ class Run:
                 self.status = status
             self.done = True
             self.finished_at = time.time()
+            self.touched_at = self.finished_at
             self._write_log(
                 {"kind": "end", "status": self.status, "finishedAt": self.finished_at}
             )
@@ -290,14 +627,23 @@ class Run:
 
     @classmethod
     def load(cls, path):
-        """Rebuild a run from its transcript file (no live process attached)."""
+        """Index a run from its transcript file (no live process, no frames in RAM).
+
+        Only the metadata and the frame *count* are kept; the frames themselves
+        are read back on demand by `frames_from`. A transcript with no `end`
+        line was in flight when the bridge stopped, so it is repaired on disk
+        here - that way its interrupted state is recorded once rather than
+        re-synthesised on every startup.
+        """
         meta = None
-        frames = []
+        count = 0
         ended = False
         status = "done"
         finished_at = None
+        # Broad except on purpose: this runs over every file in runs/ at startup,
+        # and one damaged transcript must not stop the bridge from booting.
         try:
-            with open(path, "r", encoding="utf-8") as handle:
+            with open(path, "r", encoding="utf-8", errors="replace") as handle:
                 for line in handle:
                     line = line.strip()
                     if not line:
@@ -306,11 +652,13 @@ class Run:
                         obj = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    if not isinstance(obj, dict):
+                        continue
                     kind = obj.get("kind")
                     if kind == "meta":
                         meta = obj
                     elif kind == "frame":
-                        frames.append((obj.get("event"), obj.get("data")))
+                        count += 1
                     elif kind == "end":
                         ended = True
                         status = obj.get("status", "done")
@@ -326,35 +674,58 @@ class Run:
         run.cwd = meta.get("cwd", "")
         run.command = meta.get("command", [])
         run.conversation_id = meta.get("conversationId", "")
-        run.frames = frames
+        run.frames = []
+        run.count = count
+        run.in_memory = False
         run.cond = threading.Condition()
         run.proc = None
         run.started_at = meta.get("startedAt", time.time())
+        run.done = True
         run._log = None
 
         if ended:
-            run.done = True
             run.status = status
             run.finished_at = finished_at or run.started_at
         else:
             # The bridge stopped while this run was in flight - the live process
-            # is gone, so mark it interrupted but still let the client replay
-            # whatever it managed to produce.
-            run.frames.append(
-                (
-                    "error",
-                    {
-                        "type": "error",
-                        "message": "The bridge restarted while this run was in "
-                        "progress, so it was interrupted before finishing.",
-                    },
-                )
-            )
-            run.frames.append(("done", {"type": "done", "runId": run.id, "exitCode": -1}))
-            run.done = True
+            # is gone, so record it as interrupted but still let the client
+            # replay whatever it managed to produce.
             run.status = "interrupted"
             run.finished_at = run.started_at
+            run.count += run._repair(path)
+        run.touched_at = time.time()
         return run
+
+    def _repair(self, path):
+        """Close off a transcript the bridge never got to finish. Returns frames added."""
+        tail = [
+            {
+                "kind": "frame",
+                "i": self.count,
+                "event": "error",
+                "data": {
+                    "type": "error",
+                    "message": "The bridge restarted while this run was in "
+                    "progress, so it was interrupted before finishing.",
+                },
+            },
+            {
+                "kind": "frame",
+                "i": self.count + 1,
+                "event": "done",
+                "data": {"type": "done", "runId": self.id, "exitCode": -1},
+            },
+            {"kind": "end", "status": "interrupted", "finishedAt": self.finished_at},
+        ]
+        try:
+            with open(path, "a", encoding="utf-8") as handle:
+                for obj in tail:
+                    handle.write(json.dumps(obj) + "\n")
+        except Exception:
+            # Read-only disk, permissions, whatever: the run is still usable in
+            # memory, it just gets re-marked interrupted on the next startup.
+            return 0
+        return 2
 
     def delete_file(self):
         try:
@@ -367,19 +738,22 @@ class Run:
         return line[:120]
 
     def summary(self):
-        return {
-            "runId": self.id,
-            "status": self.status,
-            "done": self.done,
-            "conversationId": self.conversation_id,
-            "startedAt": int(self.started_at * 1000),
-            "finishedAt": int(self.finished_at * 1000) if self.finished_at else None,
-            "frames": len(self.frames),
-            "prompt": self.title(),
-        }
+        # Under the run's own lock: a worker may be appending frames and
+        # finishing the run while /api/runs walks the table.
+        with self.cond:
+            return {
+                "runId": self.id,
+                "status": self.status,
+                "done": self.done,
+                "conversationId": self.conversation_id,
+                "startedAt": int(self.started_at * 1000),
+                "finishedAt": int(self.finished_at * 1000) if self.finished_at else None,
+                "frames": self.count,
+                "prompt": self.title(),
+            }
 
 
-def run_worker(run, payload):
+def run_worker(run):
     """Drives one Claude process to completion, writing every event into the run.
 
     This runs on its own thread and never touches a client socket, so a browser
@@ -415,13 +789,6 @@ def run_worker(run, payload):
             },
         )
 
-        # Hand the prompt over on stdin so long prompts and quotes survive.
-        try:
-            proc.stdin.write(run.prompt)
-            proc.stdin.close()
-        except Exception as exc:
-            run.append("error", {"type": "error", "message": "could not send prompt: %s" % exc})
-
         lines = queue.Queue()
         stderr_chunks = []
 
@@ -443,8 +810,19 @@ def run_worker(run, payload):
             except Exception:
                 pass
 
+        # Start draining the pipes BEFORE handing over the prompt. Both pipes
+        # hold ~64KB; a prompt bigger than that would otherwise block us in
+        # stdin.write() while Claude blocks writing a full stdout - a deadlock
+        # that only the idle timeout could break, half an hour later.
         threading.Thread(target=pump_stdout, daemon=True).start()
         threading.Thread(target=pump_stderr, daemon=True).start()
+
+        # Hand the prompt over on stdin so long prompts and quotes survive.
+        try:
+            proc.stdin.write(run.prompt)
+            proc.stdin.close()
+        except Exception as exc:
+            run.append("error", {"type": "error", "message": "could not send prompt: %s" % exc})
 
         # Back-compat: honor a legacy "run_timeout_seconds" as the idle timeout.
         idle_timeout = float(
@@ -526,28 +904,45 @@ def run_worker(run, payload):
 
 
 def reap_runs():
-    """Drop finished runs, in memory and on disk, past the retention window."""
-    retention = float(CONFIG.get("run_retention_seconds", 21600))
+    """Two-tier cleanup of finished runs.
+
+    Frames leave RAM quickly (`run_memory_seconds`) but the transcript stays on
+    disk for the full retention window, so replaying an old chat still works -
+    it just costs a file read. Only when the transcript itself ages out does the
+    run become unreachable (404).
+    """
+    retention = float(CONFIG.get("run_retention_seconds", 604800))
+    memory_ttl = float(CONFIG.get("run_memory_seconds", 600))
     while True:
         time.sleep(60)
-        cutoff = time.time() - retention
+        now = time.time()
         with RUNS_LOCK:
-            for run_id in list(RUNS):
-                run = RUNS[run_id]
-                if run.done and run.finished_at and run.finished_at < cutoff:
-                    run.delete_file()
-                    del RUNS[run_id]
+            runs = list(RUNS.items())
+            # A pre-emptive Stop whose POST /api/chat never arrived.
+            for run_id, when in list(CANCELLED.items()):
+                if when < now - 300:
+                    CANCELLED.pop(run_id, None)
+        for run_id, run in runs:
+            if not run.done or not run.finished_at:
+                continue
+            if run.finished_at < now - retention:
+                run.delete_file()
+                with RUNS_LOCK:
+                    RUNS.pop(run_id, None)
+            elif run.touched_at < now - memory_ttl:
+                run.release_memory()
 
 
 def load_persisted_runs():
-    """On startup, bring back runs whose transcripts are still on disk.
+    """On startup, index runs whose transcripts are still on disk.
 
     This is what makes a run survive a bridge restart: the browser reconnects
-    with the same runId and replays the saved result.
+    with the same runId and replays the saved result. Only metadata is read into
+    memory here - the frames stay in the file until something asks for them.
     """
     if not os.path.isdir(RUNS_DIR):
         return
-    retention = float(CONFIG.get("run_retention_seconds", 21600))
+    retention = float(CONFIG.get("run_retention_seconds", 604800))
     cutoff = time.time() - retention
     loaded = 0
     for name in sorted(os.listdir(RUNS_DIR)):
@@ -573,6 +968,12 @@ def load_persisted_runs():
 class Bridge(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "ClaudeBridge/1.0"
+    # Applied to the connection socket. A client that opens a connection and
+    # then stalls - mid-request-line, or mid-body after declaring a longer
+    # Content-Length - releases its thread instead of holding it forever.
+    # Streaming is unaffected: the long waits there are on the run's condition
+    # variable, not on the socket, and each write is quick.
+    timeout = 60
 
     # ---------- plumbing ----------
 
@@ -606,14 +1007,38 @@ class Bridge(BaseHTTPRequestHandler):
 
     def authorized(self):
         header = self.headers.get("Authorization", "")
-        token = header[7:].strip() if header.startswith("Bearer ") else ""
-        return secrets.compare_digest(token, CONFIG["token"])
+        token = header[7:].strip() if header[:7].lower() == "bearer " else ""
+        # compare_digest rejects non-ASCII str with a TypeError, so a token that
+        # picked up a smart quote or an accent on the way through a chat app
+        # would crash the handler and surface as "Failed to fetch" - which reads
+        # as a network fault rather than the bad token it actually is. Compare
+        # bytes instead, so a wrong token is always a plain 401.
+        return secrets.compare_digest(
+            token.encode("utf-8"), str(CONFIG["token"]).encode("utf-8")
+        )
 
     def read_json_body(self):
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ValueError("bad Content-Length")
         if length <= 0:
             return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        limit = int(CONFIG.get("max_body_bytes") or 4 * 1024 * 1024)
+        if length > limit:
+            raise ValueError("body too large")
+        # Read in chunks so the declared length never becomes an up-front
+        # allocation. A client that declares more than it sends is bounded by
+        # the handler's socket timeout rather than parking the thread forever.
+        chunks = []
+        remaining = length
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return json.loads(b"".join(chunks).decode("utf-8"))
 
     # ---------- routes ----------
 
@@ -652,8 +1077,13 @@ class Bridge(BaseHTTPRequestHandler):
         if path == "/api/runs":
             if not self.authorized():
                 return self.send_json(401, {"error": "unauthorized"})
+            # Snapshot the table, then build the summaries outside RUNS_LOCK.
+            # summary() takes each run's own lock, and a worker can be holding
+            # that across a disk flush - doing it under RUNS_LOCK would stall
+            # every other route that touches the run table.
             with RUNS_LOCK:
-                runs = [run.summary() for run in RUNS.values()]
+                live = list(RUNS.values())
+            runs = [run.summary() for run in live]
             runs.sort(key=lambda r: r["startedAt"], reverse=True)
             return self.send_json(200, {"runs": runs})
 
@@ -688,19 +1118,30 @@ class Bridge(BaseHTTPRequestHandler):
                 run = RUNS.get(run_id)
             if not run:
                 return self.send_json(404, {"error": "no such run"})
+            offset = max(0, offset)
+            # Sample `done` and `total` together, and BEFORE the frames. If the
+            # run finishes in between, the client is merely told "not done yet"
+            # and polls once more; the other order could report done while
+            # frames were still being appended, and the client would stop early
+            # on a truncated answer. When done is true, count can no longer
+            # grow, so `total` is exact exactly when the client relies on it.
             with run.cond:
-                offset = max(0, offset)
-                frames = [list(f) for f in run.frames[offset:]]
-                total = len(run.frames)
                 done = run.done
                 status = run.status
+                total = run.count
+            # Capped, so catching up on a run that produced a lot of tool output
+            # is a series of small responses rather than one huge one that a
+            # phone on a flaky tunnel would never finish downloading. The client
+            # keeps asking while `next < total`.
+            frames = [list(f) for f in run.frames_from(offset, offset + MAX_SNAPSHOT_FRAMES)]
             return self.send_json(
                 200,
                 {
                     "runId": run.id,
                     "done": done,
                     "status": status,
-                    "next": total,
+                    "next": offset + len(frames),
+                    "total": max(total, offset + len(frames)),
                     "frames": frames,
                 },
             )
@@ -717,9 +1158,18 @@ class Bridge(BaseHTTPRequestHandler):
                 payload = self.read_json_body()
             except Exception:
                 return self.send_json(400, {"error": "invalid json body"})
-            run_id = payload.get("runId")
+            # Lower-cased to match start_chat, which normalises before it stores
+            # the run - otherwise an upper-case hex id would abort nothing.
+            run_id = (payload.get("runId") or "").strip().lower()
             with RUNS_LOCK:
                 run = RUNS.get(run_id)
+                if not run and RUN_ID_RE.match(run_id):
+                    # Stop pressed while POST /api/chat is still in flight: the
+                    # Run does not exist yet. Remember the id so start_chat
+                    # refuses to launch it rather than leaving an orphan running
+                    # with nobody watching.
+                    CANCELLED[run_id] = time.time()
+                    return self.send_json(200, {"ok": True, "runId": run_id, "pending": True})
             if not run:
                 return self.send_json(404, {"error": "no such run"})
             if run.proc:
@@ -750,12 +1200,32 @@ class Bridge(BaseHTTPRequestHandler):
                 },
             )
 
+        # The browser may name the run, so that Stop can abort it even before
+        # the first frame has travelled back. Ids are hex only - they become
+        # filenames - and must not collide with a run we already know about.
+        run_id = (payload.get("runId") or "").strip().lower()
+        if run_id:
+            if not RUN_ID_RE.match(run_id):
+                return self.send_json(400, {"error": "invalid runId"})
+            with RUNS_LOCK:
+                if run_id in RUNS:
+                    return self.send_json(409, {"error": "runId already in use"})
+        else:
+            run_id = uuid.uuid4().hex
+
         if not RUN_SLOTS.acquire(blocking=False):
             return self.send_json(429, {"error": "bridge is busy, try again shortly"})
 
-        run_id = uuid.uuid4().hex
         cwd = allowed_cwd(payload.get("cwd"))
-        command = build_command(payload)[1:]  # drop the binary; worker re-adds it
+        try:
+            command = build_command(payload)[1:]  # drop the binary; worker re-adds it
+        except Exception as exc:
+            # Most likely the confinement policy could not be written. Refuse the
+            # run rather than starting one that is not fenced in.
+            RUN_SLOTS.release()
+            return self.send_json(
+                500, {"error": "could not prepare a confined run: %s" % exc}
+            )
         run = Run(
             run_id,
             prompt,
@@ -763,10 +1233,21 @@ class Bridge(BaseHTTPRequestHandler):
             command,
             conversation_id=(payload.get("conversationId") or "").strip(),
         )
-        with RUNS_LOCK:
-            RUNS[run_id] = run
 
-        threading.Thread(target=run_worker, args=(run, payload), daemon=True).start()
+        # Registering the run and honouring a pre-emptive Stop happen under one
+        # lock, so an abort that lands in this exact window cannot slip between
+        # the two and leave the run parented to nobody.
+        with RUNS_LOCK:
+            cancelled = CANCELLED.pop(run_id, None) is not None
+            if not cancelled:
+                RUNS[run_id] = run
+        if cancelled:
+            run.finish(status="cancelled")
+            run.delete_file()
+            RUN_SLOTS.release()
+            return self.send_json(409, {"error": "run was cancelled before it started"})
+
+        threading.Thread(target=run_worker, args=(run,), daemon=True).start()
 
         # Stream this run to the caller from the very first frame. If they drop,
         # stream_run just returns - the worker above keeps the run alive.
@@ -790,23 +1271,27 @@ class Bridge(BaseHTTPRequestHandler):
         index = max(0, offset)
         while True:
             with run.cond:
-                while index >= len(run.frames) and not run.done:
+                while index >= run.count and not run.done:
                     run.cond.wait(timeout=10)
-                pending = run.frames[index:]
-                index += len(pending)
-                drained = run.done and index >= len(run.frames)
+                done = run.done
+
+            # Outside the lock: an evicted run reads its frames back from disk.
+            pending = run.frames_from(index)
+            base = index
+            index += len(pending)
 
             if pending:
-                base = index - len(pending)
                 for offset_in_batch, (event, data) in enumerate(pending):
                     if not self.emit(base + offset_in_batch, event, data):
                         return  # client gone; the worker carries on without us
-            elif not drained:
-                if not self.ping():
-                    return
-
-            if drained:
+            elif done:
                 return
+            elif not self.ping():
+                return
+
+            with run.cond:
+                if run.done and index >= run.count:
+                    return
 
     def emit(self, frame_id, event, data):
         """Write one SSE frame. Returns False once the client has gone away."""
@@ -829,6 +1314,16 @@ class Bridge(BaseHTTPRequestHandler):
 
 
 def main():
+    # Python block-buffers stdout whenever it is not a terminal, so under
+    # systemd / nohup / docker the startup banner - which is where the access
+    # token is printed - would sit in a buffer indefinitely and `journalctl`
+    # would look like the bridge never started. Line-buffer it here rather than
+    # relying on PYTHONUNBUFFERED being set by whoever launches us.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
     host = CONFIG["host"]
     port = int(CONFIG["port"])
     server = ThreadingHTTPServer((host, port), Bridge)
@@ -844,7 +1339,9 @@ def main():
     print("  working dir    %s" % os.path.abspath(CONFIG["default_cwd"]))
     print("  permissions    %s" % CONFIG["default_permission_mode"])
     print("  runs kept for  %ss after finishing (survives a bridge restart)"
-          % CONFIG.get("run_retention_seconds", 21600))
+          % CONFIG.get("run_retention_seconds", 604800))
+    print("  frames in RAM  %ss after last use, then re-read from disk"
+          % CONFIG.get("run_memory_seconds", 600))
     load_persisted_runs()
     print("")
     print("  access token   %s" % CONFIG["token"])

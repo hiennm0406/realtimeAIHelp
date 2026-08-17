@@ -8,18 +8,24 @@
 
 const STORAGE_KEY = 'claude-bridge-settings'
 
-// Where the bridge lives, prefilled into Settings on a device that has never
-// been configured. A quick tunnel hands out a NEW hostname every time
-// cloudflared restarts, so when that happens this value goes stale: set
-// VITE_BRIDGE_URL at build time (Netlify: Site settings -> Environment
-// variables) to change it without touching code, or use a named tunnel to get
-// a hostname that never moves.
-const FALLBACK_BRIDGE_URL = 'https://compute-separate-point-stages.trycloudflare.com'
+// Where the bridge lives. Fixed at build time, not editable per device: a
+// device only ever needs the token.
+//
+// A Cloudflare *quick* tunnel hands out a NEW hostname every time cloudflared
+// restarts, so a value of that shape goes stale on the next restart. When it
+// does, rebuild with VITE_BRIDGE_URL set (Netlify: Site settings ->
+// Environment variables) rather than editing this line - or point it at a named
+// tunnel / Tailscale Funnel, whose hostname never moves.
+const FALLBACK_BRIDGE_URL = 'https://varieties-hunter-thesis-furnished.trycloudflare.com'
 
 // Optional chaining because `import.meta.env` only exists under Vite; this
 // module is also loaded directly by the test harness.
+export const BRIDGE_URL = import.meta.env?.VITE_BRIDGE_URL || FALLBACK_BRIDGE_URL
+
+// `url` is deliberately absent: it is a build-time constant, so storing a copy
+// per device is what let a stale hostname survive forever on a phone that had
+// been configured once.
 export const DEFAULT_SETTINGS = {
-  url: import.meta.env?.VITE_BRIDGE_URL || FALLBACK_BRIDGE_URL,
   token: '',
   model: '',
   effort: '',
@@ -31,7 +37,11 @@ export const DEFAULT_SETTINGS = {
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS }
+    const saved = raw ? JSON.parse(raw) : {}
+    // Drop a `url` written by an older build; the constant is the only source
+    // now, and there is no longer any UI that could correct a stale one.
+    delete saved.url
+    return { ...DEFAULT_SETTINGS, ...saved }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -76,10 +86,23 @@ export function getActiveRun(conversationId) {
 // truncate back to it and replay the run from scratch, so a run that was
 // half-rendered (or half-saved) before the user left rebuilds cleanly with no
 // duplicated blocks.
-export function setActiveRun(conversationId, runId, anchor) {
+//
+// `totals` is the matching snapshot of the conversation's cost/token counters at
+// that same moment. Replaying the run re-applies its `result` frame, so the
+// counters have to be rewound to this snapshot first or the run's cost is added
+// twice. It lives here, not on the component, so it survives a page reload.
+export function setActiveRun(conversationId, runId, anchor, totals) {
   if (!conversationId || !runId) return
   const map = readActiveRuns()
-  map[conversationId] = { runId, anchor: anchor ?? 0, startedAt: Date.now() }
+  const existing = map[conversationId]
+  map[conversationId] = {
+    runId,
+    anchor: anchor ?? 0,
+    // Re-arming the same run (a reconnect) must not overwrite the original
+    // snapshot with counters the replay has already moved.
+    totals: existing?.runId === runId ? existing.totals : totals ? { ...totals } : null,
+    startedAt: existing?.runId === runId ? existing.startedAt : Date.now(),
+  }
   writeActiveRuns(map)
 }
 
@@ -91,8 +114,23 @@ export function clearActiveRun(conversationId) {
   }
 }
 
-function baseUrl(settings) {
-  return (settings.url || '').trim().replace(/\/+$/, '')
+/**
+ * A run id, chosen here rather than by the bridge.
+ *
+ * The bridge accepts it verbatim (hex only - it becomes a filename), which is
+ * what lets Stop abort a run in the window before the first frame has made it
+ * back over a slow tunnel. Without it, hitting Stop early left the run working
+ * on the bridge with nobody watching, holding a concurrency slot until it timed
+ * out half an hour later.
+ */
+export function newRunId() {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function baseUrl() {
+  return BRIDGE_URL.trim().replace(/\/+$/, '')
 }
 
 function authHeaders(settings) {
@@ -102,9 +140,33 @@ function authHeaders(settings) {
   }
 }
 
-export async function checkHealth(settings) {
-  const response = await fetch(`${baseUrl(settings)}/api/health`, {
+/**
+ * Fetch with a deadline, so a tunnel that accepts the connection and then goes
+ * quiet fails in seconds instead of hanging the button forever.
+ */
+async function fetchWithTimeout(url, options = {}, ms = 20000) {
+  const timer = new AbortController()
+  const id = setTimeout(() => timer.abort(), ms)
+  // Honour a caller's signal too, without losing the timeout.
+  const onOuterAbort = () => timer.abort()
+  options.signal?.addEventListener('abort', onOuterAbort, { once: true })
+  try {
+    return await fetch(url, { ...options, signal: timer.signal })
+  } catch (error) {
+    if (error.name === 'AbortError' && !options.signal?.aborted) {
+      throw new Error(`The bridge did not respond within ${Math.round(ms / 1000)}s.`)
+    }
+    throw error
+  } finally {
+    clearTimeout(id)
+    options.signal?.removeEventListener('abort', onOuterAbort)
+  }
+}
+
+export async function checkHealth(settings, signal) {
+  const response = await fetchWithTimeout(`${baseUrl()}/api/health`, {
     headers: authHeaders(settings),
+    signal,
   })
   if (!response.ok) {
     throw new Error(
@@ -118,7 +180,7 @@ export async function checkHealth(settings) {
 
 export async function abortRun(settings, runId) {
   if (!runId) return
-  await fetch(`${baseUrl(settings)}/api/abort`, {
+  await fetch(`${baseUrl()}/api/abort`, {
     method: 'POST',
     headers: authHeaders(settings),
     body: JSON.stringify({ runId }),
@@ -134,16 +196,17 @@ export async function abortRun(settings, runId) {
  * Throws with `error.status === 404` when the run is gone.
  */
 export async function fetchRunSnapshot(settings, runId, offset = 0, signal) {
-  const url = `${baseUrl(settings)}/api/run?runId=${encodeURIComponent(runId)}&offset=${offset}`
-  const response = await fetch(url, { headers: authHeaders(settings), signal })
+  const url = `${baseUrl()}/api/run?runId=${encodeURIComponent(runId)}&offset=${offset}`
+  const response = await fetchWithTimeout(url, { headers: authHeaders(settings), signal }, 30000)
   if (!response.ok) throw await errorFromResponse(response)
   return response.json()
 }
 
 /** Runs the bridge is still holding: in-flight ones, plus recently finished. */
-export async function listRuns(settings) {
-  const response = await fetch(`${baseUrl(settings)}/api/runs`, {
+export async function listRuns(settings, signal) {
+  const response = await fetchWithTimeout(`${baseUrl()}/api/runs`, {
     headers: authHeaders(settings),
+    signal,
   })
   if (!response.ok) throw new Error(`Bridge replied ${response.status}.`)
   const body = await response.json()
@@ -229,18 +292,20 @@ async function errorFromResponse(response) {
 export async function streamChat({
   settings,
   prompt,
+  runId,
   sessionId,
   conversationId,
   handlers = {},
   signal,
   onActivity,
 }) {
-  const response = await fetch(`${baseUrl(settings)}/api/chat`, {
+  const response = await fetch(`${baseUrl()}/api/chat`, {
     method: 'POST',
     headers: authHeaders(settings),
     signal,
     body: JSON.stringify({
       prompt,
+      runId: runId || undefined,
       sessionId: sessionId || undefined,
       conversationId: conversationId || undefined,
       model: settings.model || undefined,

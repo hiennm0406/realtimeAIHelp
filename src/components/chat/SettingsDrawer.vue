@@ -7,21 +7,14 @@
     </div>
 
     <p class="drawer__hint">
-      Point this at the machine running <code>bridge/server.py</code>. Over the internet
-      that means your tunnel URL; on the same network it can be
-      <code>http://&lt;pc-ip&gt;:8787</code>.
+      Paste the access token <code>bridge/server.py</code> printed on startup. That is
+      all a device needs — the bridge address is baked into this build.
     </p>
 
-    <label class="drawer__label" for="bridge-url">Bridge URL</label>
-    <input
-      id="bridge-url"
-      class="input"
-      :value="form.url"
-      placeholder="https://your-tunnel.trycloudflare.com"
-      autocomplete="off"
-      spellcheck="false"
-      @input="update('url', $event.target.value)"
-    />
+    <div class="drawer__fixed">
+      <span class="drawer__fixedlabel">Bridge</span>
+      <code class="drawer__fixedurl">{{ bridgeUrl }}</code>
+    </div>
 
     <label class="drawer__label" for="bridge-token">Access token</label>
     <input
@@ -124,7 +117,7 @@
 </template>
 
 <script>
-import { checkHealth } from '../../lib/bridge.js'
+import { BRIDGE_URL, checkHealth } from '../../lib/bridge.js'
 
 export default {
   props: {
@@ -134,6 +127,7 @@ export default {
   data() {
     return {
       form: { ...this.settings },
+      bridgeUrl: BRIDGE_URL,
       testing: false,
       testError: '',
       health: null,
@@ -153,8 +147,8 @@ export default {
       } catch (error) {
         this.testError =
           `${error.message} ` +
-          'If the URL and token look right, check that the bridge is running and ' +
-          'that its allowed_origins includes this site.'
+          'If the token looks right, check that the bridge is running, that its ' +
+          'tunnel is up, and that its allowed_origins includes this site.'
       } finally {
         this.testing = false
       }
@@ -202,6 +196,33 @@ export default {
   margin: 12px 0 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* The bridge address is a build-time constant, so it is shown for reference
+   rather than offered as a field. */
+.drawer__fixed {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.drawer__fixedlabel {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.drawer__fixedurl {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+  color: var(--text-soft);
 }
 
 .drawer__grid {

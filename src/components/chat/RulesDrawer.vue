@@ -64,7 +64,8 @@ const ENDPOINTS = [
   { method: 'GET', path: '/api/health', desc: 'Bridge status, Claude path, active run count.' },
   { method: 'GET', path: '/api/runs', desc: 'Runs still held: running + recently finished.' },
   { method: 'POST', path: '/api/chat', desc: 'Start a run and stream it (keeps going if you leave).' },
-  { method: 'GET', path: '/api/stream', desc: 'Reconnect to a run by runId and replay it.' },
+  { method: 'GET', path: '/api/run', desc: 'Snapshot of a run from an offset. What the UI polls to catch up.' },
+  { method: 'GET', path: '/api/stream', desc: 'Reconnect to a run by runId and replay it as SSE.' },
   { method: 'POST', path: '/api/abort', desc: 'Kill a run and its child processes.' },
 ]
 

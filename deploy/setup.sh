@@ -69,6 +69,9 @@ Type=simple
 User=$SVC_USER
 WorkingDirectory=$APP_DIR
 EnvironmentFile=/etc/claude-bridge.env
+# Python block-buffers stdout when it is a pipe, so without this journalctl
+# shows nothing for a long time - including the startup banner and the token.
+Environment=PYTHONUNBUFFERED=1
 ExecStart=$PYTHON bridge/server.py
 Restart=always
 RestartSec=3

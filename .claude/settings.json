@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell($c = @\\(\\); Get-ChildItem -Path \"C:\\\\\",\"D:\\\\\" -Filter \"python.exe\" -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName)",
+      "Bash(git --no-pager diff --stat)",
+      "Bash(git --no-pager diff src/components/chat/ChatPage.vue)",
+      "Bash(wsl -e python3 --version)",
+      "PowerShell(npm audit --omit=dev 2>&1)",
+      "PowerShell(npm audit 2>&1)",
+      "PowerShell($job = Start-Job -ScriptBlock { Set-Location \"d:\\\\Hien_Project\\\\realtimeAIHelp\"; npm run dev 2>&1 }; Start-Sleep -Seconds 8; try { $r = Invoke-WebRequest -Uri \"http://localhost:5173/\" -UseBasicParsing -TimeoutSec 10; Write-Output \"DEV SERVER OK: $\\($r.StatusCode\\)\"; if \\($r.Content -match 'src/main.js'\\) { Write-Output \"entry script present\" } } catch { Write-Output \"DEV FAILED: $_\" }; Receive-Job $job | Select-Object -First 8; Stop-Job $job; Remove-Job $job -Force)",
+      "Bash(git --no-pager diff -U2 bridge/server.py)",
+      "Bash(cp src/lib/markdown.js /c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/scratchpad/markdown.mjs)",
+      "Bash(cp src/lib/conversation.js /c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/scratchpad/conversation.mjs)",
+      "Bash(sed -i 's|'\\\\''./format.js'\\\\''|'\\\\''./format.mjs'\\\\''|' /c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/scratchpad/conversation.mjs)",
+      "Bash(node /c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/scratchpad/mdtest.mjs)",
+      "PowerShell(Write-Output \"--- winget ---\"; try { winget --version } catch { Write-Output \"no winget\" }; Write-Output \"--- claude ---\"; $c = Get-Command claude -ErrorAction SilentlyContinue; if \\($c\\) { Write-Output $c.Source } else { Write-Output \"claude NOT on PATH\" })",
+      "PowerShell(winget install --id Python.Python.3.13 --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1)",
+      "PowerShell(Get-ChildItem -Path \"$env:USERPROFILE\" -Filter \"claude.exe\" -Recurse -Depth 5 -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName; Write-Output \"--- .claude dir ---\"; Get-ChildItem \"$env:USERPROFILE\\\\.claude\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)",
+      "Bash(\"/c/Users/vende/AppData/Local/Programs/Python/Python313/python.exe\" bridge/server.py)",
+      "Bash(sleep 3; cat \"/c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/tasks/bsriyrqeg.output\")",
+      "Read(//c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/tasks/**)",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -H \"Authorization: Bearer tok\u00e9n-v\u1edb\u00ed-d\u1ea5u\" http://127.0.0.1:8787/api/health)",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -H \"Authorization: Bearer nope\" http://127.0.0.1:8787/api/health)",
+      "Bash(taskkill //F //PID 50028)",
+      "Bash(/c/Users/vende/AppData/Local/Programs/Python/Python313/python.exe -)",
+      "Bash(PYTHONUNBUFFERED=1 \"/c/Users/vende/AppData/Local/Programs/Python/Python313/python.exe\" bridge/server.py)",
+      "Bash(sleep 3; cat \"/c/Users/vende/AppData/Local/Temp/claude/d--Hien-Project-realtimeAIHelp/09f39769-25ae-4d5c-b6f8-6b1ae7c94e6a/tasks/bnmlev990.output\")",
+      "Bash(echo \"=== result ===\"; grep '\"result\"' /tmp/sse.txt | head -c 900; echo; echo \"=== assistant text ===\"; grep -o '\"text\": *\"[^\"]*\"' /tmp/sse.txt | tail -3; echo \"=== done frame ===\"; tail -4 /tmp/sse.txt)",
+      "Read(//tmp/**)",
+      "Bash(tasklist //FI \"IMAGENAME eq claude.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name='claude.exe'\" | Select-Object ProcessId, ParentProcessId, @{n='Cmd';e={ if \\($_.CommandLine\\) { $_.CommandLine.Substring\\(0, [Math]::Min\\(110, $_.CommandLine.Length\\)\\) } else { '\\(none\\)' } }} | Format-List)",
+      "Bash(netstat -ano)",
+      "PowerShell(npm install -g @anthropic-ai/claude-code 2>&1)",
+      "Bash(timeout 120 /c/Users/vende/AppData/Roaming/npm/claude.cmd -p 'Reply with exactly: ok')"
+    ]
+  }
+}

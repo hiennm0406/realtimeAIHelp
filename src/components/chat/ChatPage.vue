@@ -123,10 +123,10 @@
     />
 
     <div v-if="!configured" class="chat__setup card">
-      <b>Set the bridge URL and token first.</b>
+      <b>Paste your access token first.</b>
       <p>
         Start <code>bridge/server.py</code> on the machine that has Claude Code, copy the
-        token it prints, then open Settings above.
+        token it prints, then open Settings above. The bridge address is already set.
       </p>
       <button class="btn" type="button" @click="showSettings = true">Open settings</button>
     </div>
@@ -233,11 +233,13 @@ import SettingsDrawer from './SettingsDrawer.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolBlock from './ToolBlock.vue'
 import {
+  BRIDGE_URL,
   abortRun,
   clearActiveRun,
   fetchRunSnapshot,
   getActiveRun,
   loadSettings,
+  newRunId,
   saveSettings,
   setActiveRun,
   streamChat,
@@ -261,10 +263,16 @@ import { formatCost, formatTokens } from '../../lib/format.js'
 const STATUS_LABELS = {
   starting: 'Starting…',
   reconnecting: 'Resuming…',
+  offline: 'Connection lost — the run continues on the bridge, retrying…',
   requesting: 'Contacting the API…',
   thinking: 'Thinking…',
   responding: 'Responding…',
 }
+
+// How long a reconnect keeps retrying through a network outage before it gives
+// up and shows an error. The run itself is unaffected either way - it lives on
+// the bridge - so this only decides how long the UI waits before saying so.
+const RETRY_WINDOW_MS = 5 * 60 * 1000
 
 const isMobile = () => window.matchMedia('(max-width: 640px)').matches
 
@@ -293,7 +301,9 @@ export default {
   },
   computed: {
     configured() {
-      return Boolean(this.settings.url?.trim() && this.settings.token?.trim())
+      // The bridge address is fixed at build time, so a device is configured as
+      // soon as it has a token.
+      return Boolean(this.settings.token?.trim())
     },
     statusLabel() {
       return STATUS_LABELS[this.convo.status] || 'Working…'
@@ -337,6 +347,13 @@ export default {
     }
     document.addEventListener('visibilitychange', this.onVisible)
 
+    // Signal came back (tunnel, wifi, cellular): pick the run back up straight
+    // away instead of waiting for the next poll to time out.
+    this.onOnline = () => {
+      if (!this.running) this.maybeResume()
+    }
+    window.addEventListener('online', this.onOnline)
+
     // One persistent scroll listener drives both auto-follow and the jump arrow.
     this.$nextTick(() => {
       const el = this.$refs.scroller
@@ -348,6 +365,7 @@ export default {
     // reconnect to it when the user returns.
     this.controller?.abort()
     if (this.onVisible) document.removeEventListener('visibilitychange', this.onVisible)
+    if (this.onOnline) window.removeEventListener('online', this.onOnline)
     this.$refs.scroller?.removeEventListener('scroll', this.onLogScroll)
     if (this._raf != null) cancelAnimationFrame(this._raf)
   },
@@ -515,9 +533,13 @@ export default {
 
     async stop() {
       // Explicit stop really does kill the run, so drop its background marker.
-      await abortRun(this.settings, this.runId)
+      // `runId` is set before the request goes out, so this also works in the
+      // window before the bridge's first frame comes back - the bridge records
+      // the id as cancelled and refuses to launch it.
+      const runId = this.runId
       clearActiveRun(this.conversationId)
       this.controller?.abort()
+      await abortRun(this.settings, runId)
     },
 
     sendCommand(text) {
@@ -526,19 +548,43 @@ export default {
       this.send()
     },
 
+    /**
+     * setTimeout as a promise, cancellable by an AbortSignal.
+     *
+     * The listener is removed on the normal path too. `{ once: true }` only
+     * detaches it when the event actually fires, so a long poll loop (one sleep
+     * per iteration, all sharing the run's signal) used to pile up thousands of
+     * listeners on it over the life of a background run.
+     */
     _sleep(ms, signal) {
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, ms)
-        if (signal) {
-          signal.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(timer)
-              reject(new DOMException('Aborted', 'AbortError'))
-            },
-            { once: true }
-          )
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
         }
+        const onAbort = () => {
+          clearTimeout(timer)
+          reject(new DOMException('Aborted', 'AbortError'))
+        }
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, ms)
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+    },
+
+    /** Resolves when the device reports a network again (or the run is stopped). */
+    waitForOnline(signal) {
+      if (navigator.onLine) return Promise.resolve()
+      return new Promise((resolve) => {
+        const done = () => {
+          window.removeEventListener('online', done)
+          signal?.removeEventListener('abort', done)
+          resolve()
+        }
+        window.addEventListener('online', done, { once: true })
+        signal?.addEventListener('abort', done, { once: true })
       })
     },
 
@@ -561,6 +607,11 @@ export default {
       if (anchor >= 0 && anchor < this.convo.timeline.length) {
         this.convo.timeline.splice(anchor)
       }
+      // The run is replayed from its first frame, so anything it already
+      // contributed to the running totals has to come off first - otherwise a
+      // reconnect that lands after the run's `result` frame counts its cost and
+      // tokens twice. `active.totals` is the snapshot taken when the run started.
+      if (active.totals) Object.assign(this.convo.totals, active.totals)
       // Blocks and tools key off a live run's message ids; clear them so the
       // replay rebuilds instead of merging into stale entries.
       this.convo.blocks = {}
@@ -583,6 +634,8 @@ export default {
       const dispatch = (event, data) => {
         if (event === 'claude') applyClaudeEvent(this.convo, data)
         else if (event === 'bridge') {
+          // Re-arm the marker; setActiveRun keeps the original totals snapshot
+          // for a run id it already knows.
           if (data.type === 'started') setActiveRun(conversationId, runId, anchor)
         } else if (event === 'notice') {
           this.convo.timeline.push({
@@ -597,6 +650,7 @@ export default {
 
       let offset = 0
       let failures = 0
+      let failingSince = 0
       let ended = 'resolved'
       try {
         while (true) {
@@ -604,14 +658,32 @@ export default {
           try {
             snap = await fetchRunSnapshot(this.settings, runId, offset, signal)
             failures = 0
+            failingSince = 0
+            if (this.convo.status === 'offline') this.convo.status = 'reconnecting'
             this._lastRx = performance.now()
           } catch (error) {
             if (error.name === 'AbortError' || error.status === 404) throw error
-            // A transient tunnel/network blip: back off and try again rather
-            // than surfacing an error the user didn't cause.
+            // A blip in the tunnel, the mobile signal, or a laptop lid closing.
+            // The run is still working on the bridge, so give up only after a
+            // sustained outage rather than after a handful of quick retries -
+            // a phone changing cells can easily lose a minute.
             failures += 1
-            if (failures >= 5) throw error
-            await this._sleep(2000, signal)
+            if (!failingSince) failingSince = Date.now()
+            if (Date.now() - failingSince > RETRY_WINDOW_MS) throw error
+            this.convo.status = 'offline'
+            if (!navigator.onLine) {
+              // The device's radio is off - waiting is free and burning retries
+              // against it is pointless. Time spent with no network at all does
+              // not count towards the give-up window either: it is not evidence
+              // the bridge is unreachable, so an hour in a tunnel should still
+              // reconnect on the way out rather than surface an error.
+              await this.waitForOnline(signal)
+              failures = 0
+              failingSince = 0
+              continue
+            }
+            // 2s, 4s, 8s, then every 15s.
+            await this._sleep(Math.min(2000 * 2 ** (failures - 1), 15000), signal)
             continue
           }
 
@@ -619,12 +691,20 @@ export default {
           offset = snap.next
           this.afterStreamUpdate()
 
-          if (snap.done) {
+          // The bridge caps how many frames one snapshot carries, so `done` on
+          // its own is not "caught up" - there may still be a backlog to pull.
+          // An older bridge omits `total`, in which case there never is one.
+          const total = Number.isFinite(snap.total) ? snap.total : offset
+          const behind = offset < total
+
+          if (snap.done && !behind) {
             clearActiveRun(conversationId)
             break
           }
           if (this.conversationId !== conversationId) break
-          await this._sleep(1500, signal)
+          // Still catching up: ask again immediately rather than idling 1.5s
+          // between pages.
+          if (!behind) await this._sleep(1500, signal)
         }
       } catch (error) {
         if (error.name === 'AbortError') {
@@ -642,7 +722,7 @@ export default {
           ended = 'error'
           addLocalError(
             this.convo,
-            `${error.message} Check that the bridge is running and reachable at ${this.settings.url}.`
+            `${error.message} Check that the bridge is running and reachable at ${BRIDGE_URL}.`
           )
         }
       } finally {
@@ -679,19 +759,27 @@ export default {
       this.persist()
 
       // Where the answer begins - what a reconnect truncates back to before it
-      // replays this run.
+      // replays this run - and the counters as they stood at that point.
       const anchor = this.convo.timeline.length
+      const totals = { ...this.convo.totals }
       const sessionId = this.convo.sessionId
       const conversationId = this.conversationId
+
+      // Name the run before asking for it, so Stop can abort it even while the
+      // POST is still in flight.
+      const runId = newRunId()
+      this.runId = runId
 
       this.convo.status = 'starting'
       this._pinned = true
       await this.runStream({
         anchor,
+        totals,
         start: ({ signal, handlers, onActivity }) =>
           streamChat({
             settings: this.settings,
             prompt,
+            runId,
             sessionId,
             conversationId,
             handlers,
@@ -706,7 +794,7 @@ export default {
      * events into the timeline, keep the view pinned to the bottom, and record
      * or clear the background-run marker as the run starts and finishes.
      */
-    async runStream({ start, anchor = 0, isResume = false }) {
+    async runStream({ start, anchor = 0, totals = null }) {
       this.running = true
       this.controller = new AbortController()
       this._pending = []
@@ -728,7 +816,7 @@ export default {
               if (data.type === 'started') {
                 this.runId = data.runId
                 // Remember the run so a return trip can reconnect to it.
-                setActiveRun(this.conversationId, data.runId, anchor)
+                setActiveRun(this.conversationId, data.runId, anchor, totals)
               }
             },
             // High-frequency: buffer and apply at most once per animation frame,
@@ -765,19 +853,11 @@ export default {
           // Left mid-run: don't write an error, the run is still going in the
           // background and can be picked back up.
           if (!getActiveRun(this.conversationId)) addLocalError(this.convo, 'Stopped.')
-        } else if (isResume && error.status === 404) {
-          ended = 'error'
-          clearActiveRun(this.conversationId)
-          this.convo.timeline.push({
-            id: `n${Date.now()}${this.convo.timeline.length}`,
-            kind: 'notice',
-            text: 'The background run finished a while ago and its transcript is no longer available to replay.',
-          })
         } else {
           ended = 'error'
           addLocalError(
             this.convo,
-            `${error.message} Check that the bridge is running and reachable at ${this.settings.url}.`
+            `${error.message} Check that the bridge is running and reachable at ${BRIDGE_URL}.`
           )
         }
       } finally {
@@ -1317,5 +1397,56 @@ export default {
   padding: 0;
   font-size: 12.5px;
   line-height: 1.55;
+}
+
+.md blockquote {
+  margin: 0 0 12px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text-soft);
+}
+
+.md hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.md del {
+  opacity: 0.65;
+}
+
+/* Tables scroll inside their own box: a wide one must never make the whole
+   chat column scroll sideways, which is what happens on a phone otherwise. */
+.md .md-tablewrap {
+  margin: 0 0 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.md table.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.md table.md-table th,
+.md table.md-table td {
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.md table.md-table th {
+  background: var(--panel-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.md table.md-table tr:last-child td {
+  border-bottom: 0;
 }
 </style>

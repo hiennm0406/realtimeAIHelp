@@ -3,7 +3,9 @@
     <p v-if="item.isError" class="res__error">{{ item.text || 'Run failed.' }}</p>
 
     <div class="res__stats">
-      <span v-for="stat in stats" :key="stat.label" class="res__stat" :title="stat.title">
+      <!-- Keyed by position: two of these stats (duration, stop reason) carry an
+           empty label, so keying on the label would collide. -->
+      <span v-for="(stat, i) in stats" :key="i" class="res__stat" :title="stat.title">
         <b>{{ stat.value }}</b>
         {{ stat.label }}
       </span>
