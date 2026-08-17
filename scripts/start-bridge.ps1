@@ -127,24 +127,60 @@ foreach ($i in 1..$deadline) {
 if (-not $hostname) { throw "No tunnel hostname within ${TunnelTimeoutSeconds}s. See $tunnelLog" }
 Say $hostname
 
-# Confirm the hostname actually serves this bridge before publishing it. Without
-# this the script could commit an address that never resolves.
-foreach ($i in 1..20) {
-  try {
-    Invoke-WebRequest -UseBasicParsing -Uri "$hostname/api/health" -TimeoutSec 8 | Out-Null
-    break
-  } catch {
-    if ($_.Exception.Response.StatusCode.value__ -eq 401) { break }
-    if ($i -eq 20) { throw "Tunnel $hostname never answered." }
-    Start-Sleep -Seconds 2
+# Confirm the hostname actually serves this bridge before publishing it, so the
+# script cannot commit an address that never answers.
+#
+# 401 counts as success: no token is sent, so a rejection still proves the
+# bridge is on the other end of the tunnel.
+#
+# The local resolver is not the authority here. A fresh quick-tunnel hostname
+# can stay unresolvable on this machine for minutes (negative caching, or an
+# ISP resolver that will not serve brand-new names) while the rest of the world
+# reaches it fine - which is exactly the case where refusing to publish would be
+# wrong. So a local failure falls back to asking a public resolver and talking
+# to the edge directly.
+function Test-Tunnel {
+  param([string]$Url)
+
+  foreach ($i in 1..10) {
+    try {
+      Invoke-WebRequest -UseBasicParsing -Uri "$Url/api/health" -TimeoutSec 8 | Out-Null
+      return 'local'
+    } catch {
+      if ($_.Exception.Response.StatusCode.value__ -eq 401) { return 'local' }
+      Start-Sleep -Seconds 2
+    }
   }
+
+  $name = ([uri]$Url).Host
+  foreach ($server in @('1.1.1.1', '8.8.8.8')) {
+    try {
+      $ip = (Resolve-DnsName -Name $name -Type A -Server $server -ErrorAction Stop |
+             Where-Object IPAddress | Select-Object -First 1).IPAddress
+    } catch { continue }
+    if (-not $ip) { continue }
+    $code = curl.exe -s -o NUL -w '%{http_code}' --max-time 15 `
+      --resolve "${name}:443:$ip" "$Url/api/health" 2>$null
+    if ($code -in @('200', '401')) { return "public via $server ($ip)" }
+  }
+  return $null
 }
-Say 'tunnel is answering'
+
+$reach = Test-Tunnel -Url $hostname
+if (-not $reach) { throw "Tunnel $hostname never answered, locally or from a public resolver." }
+if ($reach -eq 'local') {
+  Say 'tunnel is answering'
+} else {
+  Say "tunnel is answering $reach"
+  Say 'this machine cannot resolve it yet; other devices can. Publishing anyway.'
+}
 
 # --- publish -----------------------------------------------------------------
 Step 'Updating the site'
 $source = Get-Content $bridgeJs -Raw
-$pattern = "(?m)^const FALLBACK_BRIDGE_URL = '.*'$"
+# No `$` anchor: the file is checked out with CRLF, and a trailing \r sits
+# between the closing quote and the line end.
+$pattern = "(?m)^const FALLBACK_BRIDGE_URL = '[^']*'"
 if (-not [regex]::IsMatch($source, $pattern)) {
   throw "FALLBACK_BRIDGE_URL not found in $bridgeJs - has the constant been renamed?"
 }
