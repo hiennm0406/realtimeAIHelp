@@ -1,0 +1,160 @@
+<#
+  Starts the bridge, opens a quick tunnel, and publishes the new address.
+
+  A Cloudflare quick tunnel gets a fresh hostname on every start, and the site
+  reads that hostname from a build-time constant - so a restart is only finished
+  once the constant has been rebuilt and redeployed. Netlify builds from git, so
+  "redeploy" here means: rewrite the constant, commit, push.
+
+  Doing that by hand is what leaves the site pointing at a dead tunnel, with no
+  field in the UI to correct it. This script closes the loop instead.
+
+      powershell -ExecutionPolicy Bypass -File scripts\start-bridge.ps1
+
+  -NoPush  updates the source but stops short of committing (dry run).
+#>
+
+[CmdletBinding()]
+param(
+  [switch]$NoPush,
+  [int]$TunnelTimeoutSeconds = 90
+)
+
+$ErrorActionPreference = 'Stop'
+$repo = Split-Path -Parent $PSScriptRoot
+$bridgeJs = Join-Path $repo 'src\lib\bridge.js'
+$logDir = Join-Path $repo 'bridge\logs'
+$tunnelLog = Join-Path $logDir 'cloudflared.log'
+
+function Say($msg) { Write-Host "  $msg" }
+function Step($msg) { Write-Host "`n> $msg" -ForegroundColor Cyan }
+
+if (-not (Test-Path $bridgeJs)) { throw "Not a checkout of this repo: $bridgeJs is missing." }
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+
+# --- python ------------------------------------------------------------------
+$python = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $python) { $python = (Get-Command py -ErrorAction SilentlyContinue).Source }
+if (-not $python) { throw 'Python not found on PATH.' }
+
+$cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
+if (-not $cloudflared) {
+  $guess = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
+  if (Test-Path $guess) { $cloudflared = $guess } else { throw 'cloudflared not found.' }
+}
+
+# --- clear the old pair ------------------------------------------------------
+# Both are restarted together on purpose: a tunnel left over from a previous run
+# points at the port we are about to rebind, and would keep serving a hostname
+# this script is not the one publishing.
+Step 'Stopping any previous bridge and tunnel'
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+  Where-Object { $_.CommandLine -like '*bridge/server.py*' -or $_.CommandLine -like '*bridge\server.py*' } |
+  ForEach-Object { Say "bridge pid $($_.ProcessId)"; Stop-Process -Id $_.ProcessId -Force -Confirm:$false }
+Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" |
+  Where-Object { $_.CommandLine -like '*127.0.0.1:8787*' } |
+  ForEach-Object { Say "tunnel pid $($_.ProcessId)"; Stop-Process -Id $_.ProcessId -Force -Confirm:$false }
+Start-Sleep -Milliseconds 1200
+
+# --- bridge ------------------------------------------------------------------
+Step 'Starting the bridge'
+$env:PYTHONUNBUFFERED = '1'
+Start-Process -FilePath $python -ArgumentList 'bridge/server.py' `
+  -WorkingDirectory $repo -WindowStyle Hidden
+
+# Poll rather than sleep a fixed amount: an unauthenticated 401 already proves
+# the listener is up, and is the fastest honest signal we can get without
+# reading the token out of config.json.
+$up = $false
+foreach ($i in 1..30) {
+  try {
+    Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8787/api/health' -TimeoutSec 3 | Out-Null
+    $up = $true; break
+  } catch {
+    if ($_.Exception.Response.StatusCode.value__ -eq 401) { $up = $true; break }
+    Start-Sleep -Milliseconds 500
+  }
+}
+if (-not $up) { throw 'Bridge did not come up on 127.0.0.1:8787.' }
+Say 'listening on 127.0.0.1:8787'
+
+# --- tunnel ------------------------------------------------------------------
+Step 'Opening the quick tunnel'
+Remove-Item $tunnelLog -ErrorAction SilentlyContinue
+Start-Process -FilePath $cloudflared `
+  -ArgumentList 'tunnel', '--url', 'http://127.0.0.1:8787', '--no-autoupdate' `
+  -WorkingDirectory $repo -WindowStyle Hidden `
+  -RedirectStandardError $tunnelLog -RedirectStandardOutput "$tunnelLog.out"
+
+$hostname = $null
+$deadline = $TunnelTimeoutSeconds * 2
+foreach ($i in 1..$deadline) {
+  Start-Sleep -Milliseconds 500
+  if (-not (Test-Path $tunnelLog)) { continue }
+  $text = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue
+  $m = [regex]::Match($text, 'https://[a-z0-9\-]+\.trycloudflare\.com')
+  if ($m.Success) { $hostname = $m.Value; break }
+}
+if (-not $hostname) { throw "No tunnel hostname within ${TunnelTimeoutSeconds}s. See $tunnelLog" }
+Say $hostname
+
+# Confirm the hostname actually serves this bridge before publishing it. Without
+# this the script could commit an address that never resolves.
+foreach ($i in 1..20) {
+  try {
+    Invoke-WebRequest -UseBasicParsing -Uri "$hostname/api/health" -TimeoutSec 8 | Out-Null
+    break
+  } catch {
+    if ($_.Exception.Response.StatusCode.value__ -eq 401) { break }
+    if ($i -eq 20) { throw "Tunnel $hostname never answered." }
+    Start-Sleep -Seconds 2
+  }
+}
+Say 'tunnel is answering'
+
+# --- publish -----------------------------------------------------------------
+Step 'Updating the site'
+$source = Get-Content $bridgeJs -Raw
+$pattern = "(?m)^const FALLBACK_BRIDGE_URL = '.*'$"
+if (-not [regex]::IsMatch($source, $pattern)) {
+  throw "FALLBACK_BRIDGE_URL not found in $bridgeJs - has the constant been renamed?"
+}
+$current = [regex]::Match($source, $pattern).Value
+if ($current -like "*$hostname*") {
+  Say 'constant already current, nothing to commit'
+} else {
+  $updated = [regex]::Replace($source, $pattern, "const FALLBACK_BRIDGE_URL = '$hostname'")
+  # -NoNewline: the file already ends in one; Set-Content would add a second.
+  Set-Content -Path $bridgeJs -Value $updated -Encoding utf8 -NoNewline
+  Say "bridge.js -> $hostname"
+
+  if ($NoPush) {
+    Say 'skipping commit (-NoPush)'
+  } else {
+    Push-Location $repo
+    try {
+      git add src/lib/bridge.js
+      git commit -m "Point the site at the current bridge tunnel
+
+Quick tunnels get a new hostname on every restart, and the site reads
+the address from a build-time constant, so the constant has to follow.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" | Out-Null
+      git push | Out-Null
+      Say 'pushed to origin/main - Netlify will rebuild'
+    } finally { Pop-Location }
+  }
+}
+
+# --- allowed_origins ---------------------------------------------------------
+# The site's own origin is a separate axis: it only changes when the site moves,
+# not when the tunnel restarts, so this is a reminder rather than an edit.
+$config = Join-Path $repo 'bridge\config.json'
+if (Test-Path $config) {
+  $origins = (Get-Content $config -Raw | ConvertFrom-Json).allowed_origins
+  Step 'Origins the bridge will accept'
+  $origins | ForEach-Object { Say $_ }
+  Say 'Opening the site from anywhere else fails with "Failed to fetch".'
+}
+
+Write-Host "`nBridge is live at $hostname" -ForegroundColor Green

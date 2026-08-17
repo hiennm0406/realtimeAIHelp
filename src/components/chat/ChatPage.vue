@@ -74,11 +74,6 @@
             ☰
           </button>
           <b class="chat__brand">Trợ lý của Lan Hương, phục vụ mọi nơi</b>
-          <span v-if="convo.model" class="chat__pill">{{ convo.model }}</span>
-          <span v-if="convo.permissionMode" class="chat__pill">{{ convo.permissionMode }}</span>
-          <span v-if="convo.sessionId" class="chat__pill" :title="convo.sessionId">
-            session {{ convo.sessionId.slice(0, 8) }}
-          </span>
         </div>
 
         <div class="chat__bartools">
@@ -960,15 +955,6 @@ export default {
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
-}
-
-.chat__pill {
-  font-size: 11.5px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 9px;
-  white-space: nowrap;
 }
 
 .chat__bartools {
