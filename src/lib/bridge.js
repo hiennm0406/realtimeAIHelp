@@ -16,7 +16,7 @@ const STORAGE_KEY = 'claude-bridge-settings'
 // does, rebuild with VITE_BRIDGE_URL set (Netlify: Site settings ->
 // Environment variables) rather than editing this line - or point it at a named
 // tunnel / Tailscale Funnel, whose hostname never moves.
-const FALLBACK_BRIDGE_URL = 'https://judicial-incidents-eyes-use.trycloudflare.com'
+const FALLBACK_BRIDGE_URL = 'https://loves-powerful-administrators-zones.trycloudflare.com'
 
 // Optional chaining because `import.meta.env` only exists under Vite; this
 // module is also loaded directly by the test harness.
