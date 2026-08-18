@@ -139,9 +139,10 @@
               v-for="(shot, i) in item.images"
               :key="i"
               class="shot"
-              :src="shot.thumb"
+              :src="shotSrc(shot)"
               :alt="shot.name || 'attached image'"
-              :title="shot.name"
+              :title="shot.name || 'Open image'"
+              @click="openViewer(shot)"
             />
           </div>
           <div v-if="item.text" class="bubble">{{ item.text }}</div>
@@ -207,7 +208,7 @@
         <div v-if="attachError" class="tray__err">{{ attachError }}</div>
         <div v-if="attachments.length" class="tray__items">
           <div v-for="shot in attachments" :key="shot.id" class="tray__item">
-            <img class="tray__thumb" :src="shot.thumb" :alt="shot.name" />
+            <img class="tray__thumb" :src="shot.preview" :alt="shot.name" />
             <button
               class="tray__drop"
               type="button"
@@ -272,6 +273,21 @@
         </button>
       </div>
     </form>
+    </div>
+
+    <div
+      v-if="viewer"
+      class="viewer"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="viewer.name || 'Image'"
+      @click.self="closeViewer"
+    >
+      <button class="viewer__close" type="button" title="Close (Esc)" @click="closeViewer">
+        ✕
+      </button>
+      <img class="viewer__img" :src="shotSrc(viewer)" :alt="viewer.name || 'attached image'" />
+      <div v-if="viewer.name" class="viewer__name">{{ viewer.name }}</div>
     </div>
   </div>
 </template>
@@ -345,10 +361,12 @@ export default {
       history: [],
       draft: '',
       // Images staged for the next message. Cleared on send, and never written
-      // to history in this form - only their thumbnails travel into the
+      // to history in this form - only their previews travel into the
       // transcript.
       attachments: [],
       attachError: '',
+      // The image currently open full-screen, or null.
+      viewer: null,
       preparing: false,
       dragging: false,
       running: false,
@@ -436,6 +454,7 @@ export default {
     // Abort only the local reader. The run keeps going on the bridge so we can
     // reconnect to it when the user returns.
     this.controller?.abort()
+    window.removeEventListener('keydown', this.onViewerKey)
     if (this.onVisible) document.removeEventListener('visibilitychange', this.onVisible)
     if (this.onOnline) window.removeEventListener('online', this.onOnline)
     this.$refs.scroller?.removeEventListener('scroll', this.onLogScroll)
@@ -444,6 +463,32 @@ export default {
   methods: {
     formatCost,
     formatTokens,
+
+    /**
+     * Older messages stored the display copy under `thumb`; it is `preview`
+     * now. Both are read so a conversation saved before the rename still shows
+     * its images instead of a broken icon.
+     */
+    shotSrc(shot) {
+      return shot.preview || shot.thumb || ''
+    },
+
+    openViewer(shot) {
+      this.viewer = shot
+      // Escape is the expected way out of anything full-screen, and on a phone
+      // it is the back-swipe that people reach for - so the backdrop and the
+      // button both close it too.
+      window.addEventListener('keydown', this.onViewerKey)
+    },
+
+    closeViewer() {
+      this.viewer = null
+      window.removeEventListener('keydown', this.onViewerKey)
+    },
+
+    onViewerKey(event) {
+      if (event.key === 'Escape') this.closeViewer()
+    },
 
     formatBytes(bytes) {
       const kb = bytes / 1024
@@ -903,13 +948,14 @@ export default {
       // picture. Only a turn with neither text nor images is empty.
       if ((!prompt && !attachments.length) || this.running || !this.configured) return
 
-      // Sent to the model at full size; the transcript keeps thumbnails, which
-      // is what makes a conversation with screenshots still fit in localStorage.
+      // Sent to the model at full size; the transcript keeps the smaller
+      // preview, which is what makes a conversation with screenshots still fit
+      // in localStorage. The model never sees the preview.
       const images = toWirePayload(attachments)
       addUserMessage(
         this.convo,
         prompt,
-        attachments.map((a) => ({ thumb: a.thumb, name: a.name }))
+        attachments.map((a) => ({ preview: a.preview, name: a.name }))
       )
       this.draft = ''
       this.attachments = []
@@ -1346,6 +1392,7 @@ export default {
   max-height: 220px;
   border-radius: 10px;
   border: 1px solid var(--border);
+  cursor: zoom-in;
   /* The thumbnail is a downscale of what was sent, so let it keep its shape
      rather than cropping to a square - a screenshot cropped square is
      unreadable. */
@@ -1713,4 +1760,60 @@ export default {
 .md table.md-table tr:last-child td {
   border-bottom: 0;
 }
+
+/* Full-screen image viewer. Fixed to the viewport rather than nested in the
+   log, so it is unaffected by the scroller's transforms and stacking. */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+}
+
+.viewer__img {
+  max-width: 96vw;
+  max-height: 92vh;
+  border-radius: 8px;
+  object-fit: contain;
+  /* The backdrop closes on click; the image itself should not. */
+  cursor: default;
+}
+
+.viewer__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.viewer__close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.viewer__name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 0 24px;
+}
+
 </style>

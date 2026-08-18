@@ -7,10 +7,12 @@
  *   `data`  goes to the bridge and on to the model. Claude downsamples anything
  *           wider than ~1568px, so sending more pixels costs upload time on a
  *           phone connection and buys no detail.
- *   `thumb` is what the transcript keeps. Conversations live in localStorage,
- *           which is a handful of megabytes for the whole origin, so the full
- *           image must never be what gets stored - a couple of screenshots
- *           would evict the rest of the history.
+ *   `preview` is what the transcript keeps, and what the lightbox opens.
+ *           Conversations live in localStorage - a handful of megabytes for the
+ *           whole origin - so the full image must never be what gets stored: a
+ *           couple of screenshots would evict the rest of the history. 768px is
+ *           the compromise: sharp enough opened near-fullscreen on a phone,
+ *           at a fraction of the bytes of the copy that was sent.
  *
  * Both are produced here rather than at the call site so that the size rules
  * stay in one place.
@@ -20,7 +22,7 @@ export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/we
 export const MAX_IMAGES = 8
 
 const MAX_EDGE = 1568
-const THUMB_EDGE = 320
+const PREVIEW_EDGE = 768
 // Guard against someone dropping a 100MB raw photo in: read it, and the tab
 // spends seconds on a file that is about to be shrunk anyway.
 const MAX_SOURCE_BYTES = 24 * 1024 * 1024
@@ -38,15 +40,6 @@ function toBase64(buffer) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK))
   }
   return btoa(binary)
-}
-
-function readAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error('Could not read the file.'))
-    reader.readAsDataURL(file)
-  })
 }
 
 /**
@@ -115,9 +108,9 @@ function canvasToBlob(canvas, type, quality) {
 /**
  * One attachment, ready to send and to render.
  *
- * Returns `{ id, name, mediaType, data, thumb, width, height, bytes }` where
+ * Returns `{ id, name, mediaType, data, preview, width, height, bytes }` where
  * `data` is raw base64 (no data: prefix - the bridge wants the payload, not the
- * envelope) and `thumb` is a small data URL for display.
+ * envelope) and `preview` is a smaller data URL for display.
  */
 export async function prepareImage(file) {
   if (!isSupportedImage(file)) {
@@ -132,7 +125,7 @@ export async function prepareImage(file) {
   const height = bitmap.height || bitmap.naturalHeight
 
   const full = sizeWithin(width, height, MAX_EDGE)
-  const small = sizeWithin(width, height, THUMB_EDGE)
+  const small = sizeWithin(width, height, PREVIEW_EDGE)
 
   let mediaType = file.type
   let data
@@ -155,8 +148,8 @@ export async function prepareImage(file) {
     data = toBase64(await blob.arrayBuffer())
   }
 
-  const thumbCanvas = draw(bitmap, small.width, small.height, { opaque: true })
-  const thumb = thumbCanvas.toDataURL('image/jpeg', 0.6)
+  const previewCanvas = draw(bitmap, small.width, small.height, { opaque: true })
+  const preview = previewCanvas.toDataURL('image/jpeg', 0.72)
 
   if (typeof bitmap.close === 'function') bitmap.close()
 
@@ -165,7 +158,7 @@ export async function prepareImage(file) {
     name: file.name || 'image',
     mediaType,
     data,
-    thumb,
+    preview,
     width: full.width,
     height: full.height,
     // Base64 inflates by 4/3; this is the decoded size, which is what the
@@ -190,7 +183,7 @@ export function imageFilesFrom(dataTransfer) {
   return files
 }
 
-/** What actually travels to the bridge: no thumbnails, no filenames. */
+/** What actually travels to the bridge: no previews, no filenames. */
 export function toWirePayload(attachments) {
   return attachments.map((a) => ({ mediaType: a.mediaType, data: a.data }))
 }
