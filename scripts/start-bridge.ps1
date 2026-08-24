@@ -78,6 +78,36 @@ Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" |
   ForEach-Object { Say "tunnel pid $($_.ProcessId)"; Stop-Process -Id $_.ProcessId -Force -Confirm:$false }
 Start-Sleep -Milliseconds 1200
 
+# --- skills link -------------------------------------------------------------
+# Claude Code loads skills from .claude/skills, but refuses every write under
+# .claude/ regardless of permission rules - so the bridge agent could not create
+# one there. The folder is a junction to data/skills instead: reads come through
+# the link, writes land in data/, which writable_paths already allows. Recreated
+# here because a junction does not survive a clone, and a plain directory left
+# by an older checkout would silently shadow the real skills.
+Step 'Linking .claude/skills to data/skills'
+$skillStore = Join-Path $repo 'data\skills'
+$skillLink = Join-Path $repo '.claude\skills'
+if (-not (Test-Path $skillStore)) { New-Item -ItemType Directory -Path $skillStore | Out-Null }
+$link = Get-Item $skillLink -Force -ErrorAction SilentlyContinue
+if ($link -and $link.LinkType -eq 'Junction' -and $link.Target -contains $skillStore) {
+  Say 'junction already in place'
+} else {
+  if ($link) {
+    # A real directory here means someone added skills before the link existed;
+    # move them into the store rather than deleting them.
+    if ($link.LinkType -ne 'Junction') {
+      Get-ChildItem $skillLink -Force | ForEach-Object {
+        $dest = Join-Path $skillStore $_.Name
+        if (-not (Test-Path $dest)) { Move-Item $_.FullName $dest; Say "moved $($_.Name) into data\skills" }
+      }
+    }
+    Remove-Item $skillLink -Force -Recurse -Confirm:$false
+  }
+  New-Item -ItemType Junction -Path $skillLink -Target $skillStore | Out-Null
+  Say '.claude\skills -> data\skills'
+}
+
 # --- bridge ------------------------------------------------------------------
 Step 'Starting the bridge'
 $env:PYTHONUNBUFFERED = '1'

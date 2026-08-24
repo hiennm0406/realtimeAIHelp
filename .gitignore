@@ -34,3 +34,7 @@ bridge/runs/
 
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json
+
+# .claude/skills is a junction to data/skills (see scripts/start-bridge.ps1):
+# the skills themselves are versioned under data/, the link is machine-local.
+.claude/skills
