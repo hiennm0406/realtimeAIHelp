@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>CV - Vu Thi Lan Huong - Primary English Teacher</title>
+<style>
+  :root{
+    --ink:#3a2a20;
+    --muted:#8a7263;
+    --accent:#e8743c;
+    --accent-dark:#c2551f;
+    --accent-soft:#fdeee5;
+    --mint:#2f9e8f;
+    --mint-soft:#e4f4f1;
+    --line:#f0e3da;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#f4efe9;
+    font-family:"Segoe UI",-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    line-height:1.5;
+    padding:24px 12px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{
+    width:210mm;min-height:297mm;margin:0 auto 18px;
+    background:#fff;box-shadow:0 6px 28px rgba(58,42,32,.15);overflow:hidden;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    background:linear-gradient(135deg,#f08a52 0%,var(--accent) 45%,#d95f2c 100%);
+    color:#fff;padding:11mm 12mm 10mm;
+    display:flex;align-items:center;gap:9mm;position:relative;
+  }
+  header::after{
+    content:"";position:absolute;right:-18mm;top:-22mm;
+    width:60mm;height:60mm;border-radius:50%;background:rgba(255,255,255,.10);
+  }
+  .photo{
+    width:31mm;height:31mm;flex:0 0 31mm;border-radius:50%;
+    border:3.5px solid rgba(255,255,255,.75);background:rgba(255,255,255,.15);
+    display:flex;align-items:center;justify-content:center;
+    text-align:center;font-size:8.5pt;color:rgba(255,255,255,.85);
+    overflow:hidden;z-index:1;
+  }
+  .photo img{width:100%;height:100%;object-fit:cover;display:block}
+  .who{z-index:1}
+  .name{font-size:24pt;font-weight:700;line-height:1.1;letter-spacing:.01em;text-transform:uppercase}
+  .role{
+    display:inline-block;margin-top:4px;background:rgba(255,255,255,.22);
+    border-radius:999px;padding:3px 14px;font-size:10.5pt;font-weight:600;letter-spacing:.03em;
+  }
+  .tagline{font-size:9.5pt;margin-top:6px;color:rgba(255,255,255,.93);max-width:112mm}
+
+  /* ---------- Contact strip ---------- */
+  .contact{
+    background:var(--accent-soft);padding:4mm 12mm;
+    display:flex;flex-wrap:wrap;gap:2.5mm 8mm;font-size:9.5pt;
+    border-bottom:1px solid var(--line);
+  }
+  .contact b{color:var(--accent-dark);font-weight:600}
+
+  /* ---------- Body ---------- */
+  .body{padding:8mm 12mm 12mm;display:grid;grid-template-columns:1fr 60mm;gap:8mm}
+  section{margin-bottom:5.5mm}
+  h3{
+    font-size:11pt;font-weight:700;color:var(--accent-dark);
+    display:flex;align-items:center;gap:7px;margin-bottom:3mm;
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  h3::before{content:"";width:15px;height:15px;flex:0 0 15px;border-radius:5px;background:var(--accent)}
+  h3::after{content:"";flex:1;height:1px;background:var(--line)}
+  p,li{font-size:10pt}
+  .lead{text-align:justify;color:#4a382c}
+
+  .item{margin-bottom:4.5mm;border-left:2.5px solid var(--accent-soft);padding-left:5mm;position:relative}
+  .item::before{
+    content:"";position:absolute;left:-6px;top:6px;
+    width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid #fff;
+  }
+  .item .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .item .title{font-weight:700;font-size:10.5pt}
+  .item .when{font-size:9pt;color:var(--muted);white-space:nowrap}
+  .item .org{font-size:9.5pt;color:var(--mint);font-weight:600;margin-bottom:1.5mm}
+  .item ul{margin:0 0 0 4.5mm}
+  .item li{margin-bottom:1.3mm}
+  .comp{display:grid;grid-template-columns:1fr 1fr;gap:1mm 5mm}
+  .comp span{font-size:9.5pt;padding-left:4.5mm;position:relative}
+  .comp span::before{
+    content:"";position:absolute;left:0;top:6px;
+    width:5px;height:5px;border-radius:50%;background:var(--accent);
+  }
+  strong.num{color:var(--accent-dark)}
+
+  /* ---------- Right column ---------- */
+  .card{background:var(--mint-soft);border-radius:10px;padding:4.5mm 5mm;margin-bottom:4.5mm}
+  .card.warm{background:var(--accent-soft)}
+  .card h4{
+    font-size:10pt;font-weight:700;color:var(--mint);
+    text-transform:uppercase;letter-spacing:.06em;margin-bottom:2.5mm;
+  }
+  .card.warm h4{color:var(--accent-dark)}
+  .card ul{list-style:none}
+  .card li{font-size:9.5pt;margin-bottom:2mm;padding-left:4.5mm;position:relative;line-height:1.4}
+  .card li::before{
+    content:"";position:absolute;left:0;top:6px;
+    width:6px;height:6px;border-radius:50%;background:var(--mint);
+  }
+  .card.warm li::before{background:var(--accent)}
+  .chip{
+    display:inline-block;font-size:8.5pt;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:2px 9px;margin:0 4px 4px 0;
+  }
+  .card .label{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+
+  .fill{background:#fff3c4;padding:0 3px;border-radius:2px}
+
+  /* ---------- Page 2 ---------- */
+  .page.flat{padding:13mm 12mm 14mm}
+  .p2head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:2.5px solid var(--accent);padding-bottom:3mm;margin-bottom:6mm;
+  }
+  .p2head .whoname{font-size:15pt;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--accent-dark)}
+  .p2head .meta{font-size:9pt;color:var(--muted)}
+  .philosophy{
+    background:var(--accent-soft);border-left:3px solid var(--accent);
+    padding:4mm 5mm;font-size:10pt;text-align:justify;color:#4a382c;
+  }
+  .cpd{width:100%;border-collapse:collapse}
+  .cpd td{font-size:9.5pt;padding:1.6mm 0;border-bottom:1px solid var(--line);vertical-align:top}
+  .cpd td:first-child{width:20mm;color:var(--muted);white-space:nowrap}
+  .cpd td:last-child{width:34mm;color:var(--muted);text-align:right;white-space:nowrap}
+  .refs{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+  .ref{border:1px solid var(--line);border-radius:8px;padding:3.5mm 4mm;font-size:9.5pt}
+  .ref b{display:block;font-size:10pt;margin-bottom:1mm}
+  .ref span{color:var(--muted)}
+  .unit{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;
+  }
+  .unit div{
+    background:var(--mint-soft);border-radius:8px;padding:3mm 3.5mm;font-size:9.5pt;
+  }
+  .unit b{display:block;color:var(--mint);font-size:9.5pt;margin-bottom:.8mm}
+
+  .note{
+    width:210mm;margin:0 auto 14px;
+    background:#fffbe6;border:1px solid #f0d98b;border-radius:6px;
+    padding:10px 14px;font-size:13px;color:#6b5a1e;line-height:1.6;
+  }
+
+  @media print{
+    @page{size:A4;margin:0}
+    body{background:#fff;padding:0}
+    .page{box-shadow:none;margin:0;width:auto;min-height:auto;page-break-after:always}
+    .page:last-of-type{page-break-after:auto}
+    .note{display:none}
+    .fill{background:none}
+    header,.contact,.card,.philosophy,.unit div{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+  @media screen and (max-width:760px){
+    .page,.note{width:100%}
+    header{flex-direction:column;text-align:center;padding:9mm 7mm}
+    .contact{padding:4mm 7mm}
+    .body{grid-template-columns:1fr;padding:7mm}
+    .page.flat{padding:8mm 7mm}
+    .comp,.refs{grid-template-columns:1fr}
+    .unit{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div class="note">
+  <strong>Ghi chú (không hiện khi in):</strong> Phần <span class="fill">bôi vàng</span> là chỗ cần bạn điền hoặc kiểm tra lại — <em>ưu tiên các con số</em>, vì đó là thứ nhà tuyển dụng đọc kỹ nhất.
+  Xuất PDF: Ctrl+P → <em>Save as PDF</em> → Margins: <em>None</em> → bật “Background graphics”, tắt “Headers and footers”.
+  Thêm ảnh: thay nội dung khung ảnh tròn bằng &lt;img src="photo.jpg"&gt;
+</div>
+
+<div class="page">
+
+  <header>
+    <div class="photo">Portrait<br>photo</div>
+    <div class="who">
+      <div class="name">Vu Thi Lan Huong</div>
+      <div class="role">Primary School English Teacher</div>
+      <div class="tagline">
+        6+ years teaching English to children aged 6–11 — Montessori-trained, Vinschool-experienced,
+        and focused on getting primary learners reading, writing and speaking with confidence, not just passing tests.
+      </div>
+    </div>
+  </header>
+
+  <div class="contact">
+    <span><b>Phone:</b> (+84) 336 851 175</span>
+    <span><b>Email:</b> <span class="fill">lanhuong.vu@email.com</span></span>
+    <span><b>Location:</b> <span class="fill">Cau Giay District, Hanoi</span></span>
+    <span><b>DOB:</b> 30 Nov 1997</span>
+  </div>
+
+  <div class="body">
+
+    <!-- ============ LEFT ============ -->
+    <div>
+      <section>
+        <h3>Professional Summary</h3>
+        <p class="lead">
+          Primary English teacher with <strong>6+ years</strong> of unbroken classroom experience since graduating in
+          English Language from <strong>Thuongmai University</strong> — <strong>two years</strong> teaching through the
+          <strong>Montessori</strong> approach and <span class="fill">four</span> years teaching primary English at
+          <strong>Vinschool</strong>. Takes children from phonics and decoding through to independent reading and
+          confident speaking, working to both the MOET primary English curriculum and Cambridge Young Learners
+          benchmarks. Last academic year <strong><span class="fill">92%</span></strong> of students met or exceeded
+          their target level, and parent satisfaction averaged <strong><span class="fill">96%</span></strong>.
+          Seeking a primary English teaching position at <span class="fill">[School name]</span>.
+        </p>
+      </section>
+
+      <section>
+        <h3>Professional Experience</h3>
+
+        <div class="item">
+          <div class="top">
+            <span class="title">Primary English Teacher</span>
+            <span class="when"><span class="fill">Aug 2021 – Present</span></span>
+          </div>
+          <div class="org">Vinschool Education System — <span class="fill">Hanoi</span></div>
+          <ul>
+            <li>Teach <span class="fill">[X]</span> English classes a week across <span class="fill">Grades 1–5</span> (<span class="fill">25–30</span> students each), covering the four skills against MOET and Cambridge Young Learners benchmarks.</li>
+            <li><strong class="num"><span class="fill">92%</span></strong> of students met or exceeded their target level in <span class="fill">2024–2025</span>; <span class="fill">[X]</span> passed Cambridge <span class="fill">Starters / Movers / Flyers</span> with <span class="fill">[X]</span> shields or above.</li>
+            <li>Rebuilt the Grade <span class="fill">[X]</span> reading programme around levelled readers and guided reading groups, raising average reading-comprehension scores by <strong class="num"><span class="fill">[X]%</span></strong> in one year.</li>
+            <li>Run differentiated support for the <span class="fill">[X]</span> lowest-attaining students in each class; <strong class="num"><span class="fill">[X]</span></strong> moved up a level within two terms.</li>
+            <li>Co-teach with native-speaking colleagues and write termly progress reports for <span class="fill">[X]</span> families; parent satisfaction averages <strong class="num"><span class="fill">96%</span></strong>.</li>
+          </ul>
+        </div>
+
+        <div class="item">
+          <div class="top">
+            <span class="title">English Teacher — Montessori Programme</span>
+            <span class="when"><span class="fill">Jul 2019 – Jul 2021</span></span>
+          </div>
+          <div class="org"><span class="fill">[School name]</span> — <span class="fill">Hanoi</span></div>
+          <ul>
+            <li>Taught English in a mixed-age Montessori elementary classroom of <span class="fill">[X]</span> children aged <span class="fill">6–9</span>, planning from observation records rather than a fixed page-by-page syllabus.</li>
+            <li>Built the English shelf from nothing to <span class="fill">40+</span> self-correcting materials — grammar boxes, phonics and word-study cards, levelled readers — raising independent English work during the work cycle by <strong class="num"><span class="fill">[X]%</span></strong>.</li>
+            <li>Kept individual progress records for every child and turned them into termly learning plans discussed directly with parents.</li>
+            <li>Coached <span class="fill">[X]</span> assistants on guiding children through English work without taking over the task.</li>
+          </ul>
+        </div>
+
+        <div class="item">
+          <div class="top">
+            <span class="title">English Tutor &amp; Teaching Assistant</span>
+            <span class="when"><span class="fill">2017 – 2019</span></span>
+          </div>
+          <div class="org">Part-time alongside university studies</div>
+          <ul>
+            <li>Taught small groups of primary learners aged 6–11 using <span class="fill">Family and Friends / Story Fun</span>; class retention reached <strong class="num"><span class="fill">88%</span></strong>.</li>
+            <li>Tutored struggling readers one-to-one; students gained an average of <strong class="num"><span class="fill">2.0 points</span></strong> within a semester.</li>
+            <li>Created a shared resource library of <span class="fill">100+</span> flashcards, reading games and worksheets still in use by the centre.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h3>Education</h3>
+        <div class="item">
+          <div class="top">
+            <span class="title">Bachelor of Arts in English Language</span>
+            <span class="when"><span class="fill">2015 – 2019</span></span>
+          </div>
+          <div class="org">Thuongmai University (TMU), Hanoi</div>
+          <ul>
+            <li>Classification: <span class="fill">Distinction — GPA 3.4/4.0</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h3>Core Competencies</h3>
+        <div class="comp">
+          <span>Lesson &amp; curriculum planning</span>
+          <span>Classroom management</span>
+          <span>Phonics &amp; decoding</span>
+          <span>Guided reading</span>
+          <span>Reading comprehension</span>
+          <span>Writing instruction</span>
+          <span>Differentiated instruction</span>
+          <span>Formative assessment &amp; reporting</span>
+          <span>Cambridge Young Learners prep</span>
+          <span>MOET primary curriculum</span>
+          <span>Montessori methodology</span>
+          <span>Total Physical Response (TPR)</span>
+          <span>Behaviour management</span>
+          <span>Parent communication</span>
+          <span>Co-teaching</span>
+          <span>Child safeguarding</span>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============ RIGHT ============ -->
+    <aside>
+      <div class="card warm">
+        <h4>Certifications</h4>
+        <ul>
+          <li><span class="label">English</span><span class="fill">IELTS 7.5 — 2024</span></li>
+          <li><span class="label">Montessori</span><span class="fill">Elementary 6–12 — 2019</span></li>
+          <li><span class="label">Teaching</span><span class="fill">TESOL for Young Learners — 2021</span></li>
+          <li><span class="label">Pedagogy</span><span class="fill">Pedagogical Certificate — 2020</span></li>
+          <li><span class="label">Safety</span><span class="fill">Paediatric First Aid &amp; CPR — 2023</span></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h4>Teaching Expertise</h4>
+        <ul>
+          <li>Systematic phonics &amp; decoding</li>
+          <li>Guided reading with levelled texts</li>
+          <li>Building writing from sentence to paragraph</li>
+          <li>Cambridge Starters / Movers / Flyers prep</li>
+          <li>Montessori elementary methodology</li>
+          <li>Total Physical Response (TPR)</li>
+          <li>Making hands-on learning materials</li>
+          <li>Tracking and reporting progress</li>
+        </ul>
+      </div>
+
+      <div class="card warm">
+        <h4>Working With Children</h4>
+        <ul>
+          <li>Patient, warm and consistent</li>
+          <li>Clear routines and fair boundaries</li>
+          <li>Positive reinforcement, never pressure</li>
+          <li>Confident with classes of 30+</li>
+          <li>Tactful communication with parents</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h4>EdTech &amp; Tools</h4>
+        <span class="chip">Google Classroom</span>
+        <span class="chip">Quizizz</span>
+        <span class="chip">Kahoot</span>
+        <span class="chip">Canva</span>
+        <span class="chip">Nearpod</span>
+        <span class="chip">ChatGPT / Claude</span>
+        <span class="chip">PowerPoint</span>
+      </div>
+
+      <div class="card warm">
+        <h4>Talents</h4>
+        <span class="chip">Singing</span>
+        <span class="chip">Keyboard</span>
+        <span class="chip">Drawing &amp; crafts</span>
+        <span class="chip">Storytelling</span>
+        <span class="chip">Hosting events</span>
+      </div>
+
+      <div class="card">
+        <h4>Languages</h4>
+        <ul>
+          <li><span class="label">English</span>Full professional proficiency</li>
+          <li><span class="label">Vietnamese</span>Native</li>
+        </ul>
+      </div>
+
+      <div class="card warm">
+        <h4>References</h4>
+        <ul>
+          <li>Two referees listed on page 2</li>
+        </ul>
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- ================= PAGE 2 ================= -->
+<div class="page flat">
+
+  <div class="p2head">
+    <div class="whoname">Vu Thi Lan Huong</div>
+    <div class="meta">Primary School English Teacher · (+84) 336 851 175 · <span class="fill">lanhuong.vu@email.com</span> · Page 2 of 2</div>
+  </div>
+
+  <section>
+    <h3>Teaching Philosophy</h3>
+    <p class="philosophy">
+      Primary school is where a child decides whether English is something they can do or something they are bad at,
+      and that decision tends to stick. So my first job is to make sure every child in the room gets something right
+      early and often. Montessori taught me the method behind that: prepare the materials carefully, then step back
+      and let the child work — a child who chooses the task will go further than one who is assigned it. In practice
+      my lessons are short on teacher talk and long on student practice, phonics is taught systematically rather than
+      guessed at, and reading is built with texts children can actually manage on their own. Mistakes I treat as
+      evidence of thinking. The quiet ones I never rush — they are usually listening hardest.
+    </p>
+  </section>
+
+  <section>
+    <h3>Sample Units Taught</h3>
+    <div class="unit">
+      <div><b>Phonics Foundations (G1)</b>Letter–sound correspondence, blending and segmenting, built up to decodable readers.</div>
+      <div><b>My World (G1–2)</b>Family, home and daily routines — speaking frames and first independent sentences.</div>
+      <div><b>Animals &amp; Habitats (G2–3)</b>Non-fiction reading, fact-finding and a short written report.</div>
+      <div><b>Story Time (G3–4)</b>Guided reading with levelled fiction: prediction, sequencing and retelling.</div>
+      <div><b>Our Planet (G4–5)</b>Cross-curricular topic work, note-taking and a group presentation.</div>
+      <div><b>Exam Skills (G4–5)</b>Cambridge Movers and Flyers practice — listening, reading and speaking parts.</div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Professional Development</h3>
+    <table class="cpd">
+      <tr><td><span class="fill">2025</span></td><td><span class="fill">[Course / workshop name]</span> — <span class="fill">[focus]</span></td><td><span class="fill">[Provider]</span></td></tr>
+      <tr><td><span class="fill">2023</span></td><td>Paediatric First Aid &amp; CPR certification</td><td><span class="fill">[Provider]</span></td></tr>
+      <tr><td><span class="fill">2023</span></td><td><span class="fill">Positive behaviour management in the primary classroom</span></td><td><span class="fill">Vinschool</span></td></tr>
+      <tr><td><span class="fill">2022</span></td><td>TESOL for Young Learners</td><td><span class="fill">[Provider]</span></td></tr>
+      <tr><td><span class="fill">2021</span></td><td><span class="fill">Child safeguarding &amp; protection training</span></td><td><span class="fill">[Provider]</span></td></tr>
+      <tr><td><span class="fill">2019</span></td><td>Montessori Elementary training (ages 6–12)</td><td><span class="fill">[Provider]</span></td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h3>Awards &amp; Recognition</h3>
+    <div class="item">
+      <ul>
+        <li><span class="fill">Second prize</span>, school-level Outstanding Teacher competition <span class="fill">2023–2024</span>, from <span class="fill">[X]</span> entrants.</li>
+        <li><span class="fill">[Award / commendation]</span>, <span class="fill">[year]</span> — <span class="fill">[what it was for]</span>.</li>
+        <li>Termly parent satisfaction at or above <strong class="num"><span class="fill">96%</span></strong> across <span class="fill">[X]</span> consecutive terms.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h3>Co-Curricular &amp; School Contribution</h3>
+    <div class="item">
+      <ul>
+        <li><strong>Clubs:</strong> founded <span class="fill">“English Book Club”</span>, a weekly reading club now reaching <span class="fill">[X]</span> students.</li>
+        <li><strong>Competitions:</strong> prepared <span class="fill">[X]</span> students for <span class="fill">district-level English competitions</span>; <span class="fill">[X]</span> placed.</li>
+        <li><strong>Mentoring:</strong> mentored <span class="fill">[X]</span> newly qualified teachers through their first year — planning, behaviour management and parent meetings.</li>
+        <li><strong>Materials:</strong> built the shared department resource bank — <span class="fill">[X]</span> lesson packs and the levelled reading library now used across the year group.</li>
+        <li><strong>Parent partnership:</strong> ran <span class="fill">[X]</span> parent workshops on supporting reading at home.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h3>Volunteer &amp; Community</h3>
+    <div class="item">
+      <ul>
+        <li><strong><span class="fill">[Project name]</span></strong> <span class="fill">(2020 – present)</span> — volunteer English teacher for children from disadvantaged backgrounds; <span class="fill">[X]</span> hours taught.</li>
+        <li><span class="fill">[Other volunteer work, if any]</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h3>Referees</h3>
+    <div class="refs">
+      <div class="ref">
+        <b><span class="fill">Ms. Nguyen Thi A</span></b>
+        <span>Principal, <span class="fill">Vinschool</span><br>
+        <span class="fill">(+84) 987 654 321</span><br>
+        <span class="fill">email@school.edu.vn</span></span>
+      </div>
+      <div class="ref">
+        <b><span class="fill">Ms. Tran Thi B</span></b>
+        <span>Head of Primary, <span class="fill">[Montessori school]</span><br>
+        <span class="fill">(+84) 912 345 678</span><br>
+        <span class="fill">email@school.edu.vn</span></span>
+      </div>
+    </div>
+    <p style="margin-top:3mm;font-size:9pt;color:var(--muted)">Written references available on request.</p>
+  </section>
+
+</div>
+
+</body>
+</html>
