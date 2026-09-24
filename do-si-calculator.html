@@ -1,0 +1,376 @@
+<title>Máy tính lãi đồ si</title>
+<style>
+  :root{
+    --paper:#EBEDE8;
+    --paper-2:#F7F7F3;
+    --ink:#1B2230;
+    --muted:#5A6472;
+    --faint:#8A9099;
+    --indigo:#2C4A72;
+    --indigo-bright:#3E6FB0;
+    --ochre:#A26810;
+    --good:#2E7150;
+    --good-bg:#E4EEE7;
+    --bad:#A9313D;
+    --bad-bg:#F3E0E2;
+    --line:#D3D5CC;
+    --line-strong:#BBBEB2;
+    --serif:"Constantia","Palatino Linotype","Cambria",Georgia,serif;
+    --sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Code","Consolas",ui-monospace,"SF Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.55;margin:0;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:760px;margin:0 auto;padding:22px 18px 60px;}
+
+  header{border-top:5px solid var(--indigo);padding:22px 0 14px;}
+  .kicker{font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--indigo);font-weight:600;}
+  h1{font-family:var(--serif);font-weight:700;font-size:clamp(1.7rem,5vw,2.4rem);
+    line-height:1.08;margin:.25em 0 .15em;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:.98rem;margin:0;}
+
+  .card{background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
+    padding:20px;margin-top:18px;}
+  .card > h2{font-family:var(--serif);font-size:1.25rem;margin:0 0 4px;font-weight:700;}
+  .card > .hint{color:var(--muted);font-size:.85rem;margin:0 0 16px;}
+
+  /* segmented channel toggle */
+  .seg{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;margin-bottom:20px;}
+  .seg button{flex:1;appearance:none;border:0;background:transparent;padding:12px 10px;
+    font-family:var(--sans);font-size:.92rem;font-weight:600;color:var(--muted);cursor:pointer;
+    border-right:1px solid var(--line);transition:background .12s,color .12s;}
+  .seg button:last-child{border-right:0;}
+  .seg button[aria-pressed="true"]{background:var(--indigo);color:#fff;}
+  .seg button:focus-visible{outline:2px solid var(--indigo-bright);outline-offset:-2px;}
+
+  /* input rows */
+  .field{margin-bottom:20px;}
+  .field .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px;}
+  .field label{font-weight:600;font-size:.95rem;}
+  .valwrap{display:flex;align-items:baseline;gap:2px;}
+  .valwrap input[type=text]{font-family:var(--mono);font-variant-numeric:tabular-nums;
+    font-size:1.15rem;font-weight:700;color:var(--indigo);background:transparent;border:0;
+    border-bottom:2px solid var(--line-strong);text-align:right;width:110px;padding:1px 2px;}
+  .valwrap input[type=text]:focus{outline:none;border-bottom-color:var(--indigo-bright);}
+  .valwrap .unit{font-family:var(--mono);font-size:.9rem;color:var(--muted);font-weight:700;}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:4px;
+    background:var(--line-strong);outline:none;margin:6px 0 0;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;
+    background:var(--indigo);border:3px solid var(--paper-2);box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;
+    background:var(--indigo);border:3px solid var(--paper-2);cursor:pointer;}
+  input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--indigo-bright);outline-offset:2px;}
+
+  /* result panel */
+  .result{background:var(--ink);color:#EDEFF3;border-radius:8px;padding:22px;margin-top:4px;}
+  .result .rlabel{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#8FB4E6;}
+  .bignum{font-family:var(--serif);font-size:clamp(2.4rem,10vw,3.6rem);font-weight:700;line-height:1;
+    font-variant-numeric:tabular-nums;margin:6px 0 2px;}
+  .bignum.pos{color:#7FD3A6;}
+  .bignum.neg{color:#F2A6AE;}
+  .rsub{font-size:.95rem;color:#C9CFDA;margin:2px 0 0;}
+  .rsub b{color:#fff;}
+  .verdict{margin-top:16px;padding:12px 14px;border-radius:6px;font-size:.92rem;font-weight:600;}
+  .verdict.pos{background:rgba(127,211,166,.15);color:#B9E8CE;border:1px solid rgba(127,211,166,.3);}
+  .verdict.neg{background:rgba(242,166,174,.15);color:#F4C4C9;border:1px solid rgba(242,166,174,.3);}
+
+  /* money-flow bar */
+  .flow{margin-top:18px;}
+  .flowbar{display:flex;height:34px;border-radius:6px;overflow:hidden;background:#2a3242;}
+  .flowbar > div{display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;
+    color:#fff;white-space:nowrap;overflow:hidden;transition:flex-basis .18s ease;font-family:var(--mono);}
+  .seg-cost{background:var(--indigo-bright);}
+  .seg-fee{background:var(--ochre);}
+  .seg-prof{background:var(--good);}
+  .flowlegend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.78rem;color:#C9CFDA;}
+  .flowlegend span{display:flex;align-items:center;gap:6px;}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  /* advanced */
+  details{margin-top:16px;border-top:1px dashed var(--line);padding-top:12px;}
+  details summary{cursor:pointer;font-size:.85rem;color:var(--indigo-bright);font-weight:600;list-style:none;}
+  details summary::-webkit-details-marker{display:none;}
+  details summary::before{content:"⚙ ";}
+  .adv-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;margin-top:14px;}
+  .adv-grid .f{display:flex;flex-direction:column;gap:4px;}
+  .adv-grid label{font-size:.8rem;color:var(--muted);font-weight:600;}
+  .adv-grid input{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.95rem;
+    padding:7px 9px;border:1px solid var(--line-strong);border-radius:6px;background:#fff;color:var(--ink);width:100%;}
+  .adv-grid input:focus{outline:2px solid var(--indigo-bright);outline-offset:-1px;border-color:transparent;}
+
+  /* batch stats */
+  .bstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:6px;}
+  .bstat{background:var(--paper-2);padding:14px 16px;}
+  .bstat .n{font-family:var(--serif);font-size:1.5rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--indigo);}
+  .bstat .n.pos{color:var(--good);}
+  .bstat .n.neg{color:var(--bad);}
+  .bstat .l{font-size:.78rem;color:var(--muted);margin-top:5px;}
+  .bhighlight{margin-top:14px;background:var(--paper-2);border:1.5px dashed var(--line-strong);
+    border-radius:8px;padding:14px 16px;font-size:.92rem;}
+  .bhighlight b{color:var(--indigo);font-family:var(--mono);}
+
+  footer{margin-top:24px;font-size:.8rem;color:var(--faint);line-height:1.5;}
+  footer b{color:var(--muted);}
+
+  @media (max-width:520px){
+    .adv-grid{grid-template-columns:1fr;}
+    .valwrap input[type=text]{width:96px;font-size:1.05rem;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .flowbar>div,.seg button{transition:none;}
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">Công cụ tính nhanh · Kinh doanh đồ si</div>
+    <h1>Máy tính lãi mỗi chân váy</h1>
+    <p class="sub">Nhập giá vốn &amp; giá bán, chọn kênh — biết ngay lãi/lỗ mỗi món, giá hòa vốn, và bức tranh cả lô.</p>
+  </header>
+
+  <section class="card">
+    <h2>1 · Mỗi chân váy</h2>
+    <p class="hint">Kéo thanh hoặc gõ số trực tiếp.</p>
+
+    <div class="seg" role="group" aria-label="Kênh bán">
+      <button id="chTiktok" aria-pressed="true">TikTok Shop / Live</button>
+      <button id="chFb" aria-pressed="false">Facebook · COD</button>
+    </div>
+
+    <div class="field">
+      <div class="top">
+        <label for="costNum">Giá vốn / cái</label>
+        <span class="valwrap"><input type="text" id="costNum" inputmode="numeric" value="135.000"><span class="unit">đ</span></span>
+      </div>
+      <input type="range" id="costRange" min="20000" max="300000" step="5000" value="135000" aria-label="Giá vốn mỗi cái">
+    </div>
+
+    <div class="field">
+      <div class="top">
+        <label for="priceNum">Giá bán / cái</label>
+        <span class="valwrap"><input type="text" id="priceNum" inputmode="numeric" value="199.000"><span class="unit">đ</span></span>
+      </div>
+      <input type="range" id="priceRange" min="50000" max="500000" step="5000" value="199000" aria-label="Giá bán mỗi cái">
+    </div>
+
+    <div class="result">
+      <div class="rlabel">Lãi ròng mỗi món</div>
+      <div class="bignum pos" id="netOut">+38.000đ</div>
+      <p class="rsub" id="marginOut">Biên lợi nhuận <b>19%</b> · Giá hòa vốn <b>157.000đ</b></p>
+
+      <div class="flow">
+        <div class="flowbar" id="flowBar">
+          <div class="seg-cost" style="flex-basis:68%">Vốn</div>
+          <div class="seg-fee" style="flex-basis:13%">Phí</div>
+          <div class="seg-prof" style="flex-basis:19%">Lãi</div>
+        </div>
+        <div class="flowlegend">
+          <span><i class="dot" style="background:var(--indigo-bright)"></i> Giá vốn <b id="lgCost">135.000đ</b></span>
+          <span><i class="dot" style="background:var(--ochre)"></i> Phí bán <b id="lgFee">26.400đ</b></span>
+          <span><i class="dot" style="background:var(--good)"></i> Lãi <b id="lgProf">38.000đ</b></span>
+        </div>
+      </div>
+
+      <div class="verdict pos" id="verdict">Có lãi — nhưng nên nhắm giá cao hơn cho hàng lựa đắt.</div>
+    </div>
+
+    <details>
+      <summary>Tùy chỉnh chi phí (mặc định đã hợp lý)</summary>
+      <div class="adv-grid">
+        <div class="f"><label for="feePct">Phí sàn (%) — chỉ TikTok</label><input type="text" id="feePct" inputmode="decimal" value="10"></div>
+        <div class="f"><label for="procFee">Phí xử lý/đơn (đ) — TikTok</label><input type="text" id="procFee" inputmode="numeric" value="3.000"></div>
+        <div class="f"><label for="packFee">Bao bì / đơn (đ)</label><input type="text" id="packFee" inputmode="numeric" value="2.000"></div>
+        <div class="f"><label for="steamFee">Giặt/hấp / món (đ)</label><input type="text" id="steamFee" inputmode="numeric" value="1.500"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>2 · Cả lô hàng</h2>
+    <p class="hint">Giả sử bạn mua một lô cùng giá vốn &amp; bán cùng giá như trên.</p>
+
+    <div class="field">
+      <div class="top">
+        <label for="qtyNum">Số món trong lô</label>
+        <span class="valwrap"><input type="text" id="qtyNum" inputmode="numeric" value="50"><span class="unit">cái</span></span>
+      </div>
+      <input type="range" id="qtyRange" min="10" max="400" step="5" value="50" aria-label="Số món trong lô">
+    </div>
+
+    <div class="field">
+      <div class="top">
+        <label for="strNum">Tỉ lệ bán được</label>
+        <span class="valwrap"><input type="text" id="strNum" inputmode="numeric" value="85"><span class="unit">%</span></span>
+      </div>
+      <input type="range" id="strRange" min="30" max="100" step="5" value="85" aria-label="Tỉ lệ bán được">
+    </div>
+
+    <div class="bstats">
+      <div class="bstat"><div class="n" id="bVon">6,75tr</div><div class="l">Tổng vốn bỏ ra (mua cả lô)</div></div>
+      <div class="bstat"><div class="n" id="bDt">8,46tr</div><div class="l">Doanh thu (bán được ~43 món)</div></div>
+      <div class="bstat"><div class="n pos" id="bLai">+1,32tr</div><div class="l">Lợi nhuận dự kiến cả lô</div></div>
+    </div>
+
+    <div class="bhighlight" id="beRow">
+      Cần bán được <b id="beQty">40</b> / 50 món là <b>hòa vốn cả lô</b>. Bán thêm mỗi món sau đó là lãi thuần.
+    </div>
+  </section>
+
+  <footer>
+    <b>Ghi chú:</b> Công cụ ước tính, chưa tính hàng bị bom/hoàn (nên trừ hao thêm ~5–10%) và chi phí quảng cáo/thiết bị. Kênh Facebook/COD giả định không mất phí sàn (khách trả ship). Với hàng lựa giá vốn cao, ưu tiên bán Facebook/Live để né phí sàn. Cỗ máy lợi nhuận thật nằm ở hàng nhập kiện (giá vốn ~30–50k/món).
+  </footer>
+</div>
+
+<script>
+(function(){
+  var state = { channel:'tiktok' };
+  var $ = function(id){ return document.getElementById(id); };
+
+  function parseNum(str){ var d = (''+str).replace(/[^\d]/g,''); return d===''?0:parseInt(d,10); }
+  function parseDec(str){ var d = (''+str).replace(/[^\d.]/g,''); var v=parseFloat(d); return isNaN(v)?0:v; }
+  function fmt(n){ return Math.round(n).toLocaleString('vi-VN'); }
+  function fmtMoneyShort(n){
+    var s = n<0?'-':'';
+    var a = Math.abs(n);
+    if(a >= 1000000){ return s + (a/1000000).toFixed(2).replace(/\.?0+$/,'').replace('.',',') + 'tr'; }
+    if(a >= 1000){ return s + Math.round(a/1000) + 'k'; }
+    return s + Math.round(a);
+  }
+
+  // wire a range<->text pair; onChange() called after any update
+  function pair(rangeId, numId, onChange, isDecimal){
+    var r = $(rangeId), t = $(numId);
+    r.addEventListener('input', function(){
+      t.value = isDecimal ? r.value : fmt(parseNum(r.value));
+      onChange();
+    });
+    t.addEventListener('input', function(){
+      var v = isDecimal ? parseDec(t.value) : parseNum(t.value);
+      var min = parseFloat(r.min), max = parseFloat(r.max);
+      if(v < min) v = min;
+      if(v > max) v = max;
+      r.value = v;
+      onChange();
+    });
+    t.addEventListener('blur', function(){
+      var v = isDecimal ? parseDec(t.value) : parseNum(t.value);
+      t.value = isDecimal ? v : fmt(v);
+    });
+  }
+
+  function readState(){
+    state.cost   = parseNum($('costNum').value);
+    state.price  = parseNum($('priceNum').value);
+    state.feePct = parseDec($('feePct').value)/100;
+    state.proc   = parseNum($('procFee').value);
+    state.pack   = parseNum($('packFee').value);
+    state.steam  = parseNum($('steamFee').value);
+    state.qty    = Math.max(1, parseNum($('qtyNum').value));
+    state.str    = parseNum($('strNum').value)/100;
+  }
+
+  function calc(){
+    readState();
+    var isTk = state.channel === 'tiktok';
+    var feeRate = isTk ? state.feePct : 0;
+    var fixed = state.pack + state.steam + (isTk ? state.proc : 0);
+
+    var feeTotal = state.price * feeRate + fixed;
+    var net = state.price * (1 - feeRate) - state.cost - fixed;
+    var margin = state.price > 0 ? net / state.price * 100 : 0;
+    var breakEven = (1 - feeRate) > 0 ? (state.cost + fixed) / (1 - feeRate) : 0;
+
+    // ---- per-item result ----
+    var netOut = $('netOut');
+    netOut.textContent = (net>=0?'+':'−') + fmt(Math.abs(net)) + 'đ';
+    netOut.className = 'bignum ' + (net>=0?'pos':'neg');
+
+    $('marginOut').innerHTML = 'Biên lợi nhuận <b>' + (net>=0?'':'−') + Math.abs(margin).toFixed(0) +
+      '%</b> · Giá hòa vốn <b>' + fmt(breakEven) + 'đ</b>';
+
+    $('lgCost').textContent = fmt(state.cost) + 'đ';
+    $('lgFee').textContent  = fmt(feeTotal) + 'đ';
+    $('lgProf').textContent = (net>=0?'':'−') + fmt(Math.abs(net)) + 'đ';
+
+    // ---- flow bar ----
+    var base = net >= 0 ? state.price : (state.cost + feeTotal);
+    if(base <= 0) base = 1;
+    var costW = state.cost / base * 100;
+    var feeW  = feeTotal / base * 100;
+    var profW = net >= 0 ? net / base * 100 : 0;
+    var bar = $('flowBar');
+    bar.innerHTML =
+      '<div class="seg-cost" style="flex-basis:'+costW+'%">'+(costW>14?'Vốn':'')+'</div>'+
+      '<div class="seg-fee" style="flex-basis:'+feeW+'%">'+(feeW>10?'Phí':'')+'</div>'+
+      (net>=0 ? '<div class="seg-prof" style="flex-basis:'+profW+'%">'+(profW>12?'Lãi':'')+'</div>' : '');
+
+    // ---- verdict ----
+    var v = $('verdict');
+    if(net < 0){
+      v.className = 'verdict neg';
+      v.innerHTML = 'Đang LỖ ' + fmt(Math.abs(net)) + 'đ/món. Cần bán từ <b>' + fmt(breakEven) + 'đ</b> trở lên' + (isTk?' — hoặc chuyển sang bán Facebook/COD để né phí sàn.':'.');
+    } else if(margin < 12){
+      v.className = 'verdict neg';
+      v.innerHTML = 'Lãi mỏng (' + margin.toFixed(0) + '%). Với hàng lựa đắt, nên đẩy giá lên hoặc kéo giá vốn xuống.';
+    } else if(margin < 25){
+      v.className = 'verdict pos';
+      v.innerHTML = 'Có lãi ổn (' + margin.toFixed(0) + '%). Nhắm những món đẹp bán cao hơn để dày biên.';
+    } else {
+      v.className = 'verdict pos';
+      v.innerHTML = 'Biên tốt (' + margin.toFixed(0) + '%). Đây là vùng giá nên nhắm tới!';
+    }
+
+    // ---- batch ----
+    var contribution = state.price * (1 - feeRate) - fixed; // đóng góp mỗi món bán được (chưa trừ vốn lô)
+    var sold = Math.round(state.qty * state.str);
+    var tongVon = state.cost * state.qty;
+    var tongDt  = state.price * sold;
+    var tongLai = contribution * sold - tongVon;
+
+    $('bVon').textContent = fmtMoneyShort(tongVon);
+    var dt = $('bDt'); dt.textContent = fmtMoneyShort(tongDt);
+    dt.nextElementSibling.textContent = 'Doanh thu (bán được ~' + sold + ' món)';
+    var lai = $('bLai');
+    lai.textContent = (tongLai>=0?'+':'−') + fmtMoneyShort(Math.abs(tongLai));
+    lai.className = 'n ' + (tongLai>=0?'pos':'neg');
+
+    // break-even quantity for the batch
+    var beRow = $('beRow');
+    if(contribution <= 0){
+      beRow.innerHTML = 'Ở giá bán này mỗi món <b>không đủ bù chi phí</b> — không thể hòa vốn dù bán hết. Hãy tăng giá bán.';
+    } else {
+      var beQty = Math.ceil(tongVon / contribution);
+      if(beQty > state.qty){
+        beRow.innerHTML = 'Bán hết cả ' + state.qty + ' món vẫn <b>chưa đủ hòa vốn</b> (cần ~' + beQty + ' món). Tăng giá bán hoặc giảm giá vốn.';
+      } else {
+        beRow.innerHTML = 'Cần bán được <b>' + beQty + '</b> / ' + state.qty + ' món là <b>hòa vốn cả lô</b>. Mỗi món sau đó là lãi thuần.';
+      }
+    }
+  }
+
+  // channel toggle
+  function setChannel(ch){
+    state.channel = ch;
+    $('chTiktok').setAttribute('aria-pressed', ch==='tiktok');
+    $('chFb').setAttribute('aria-pressed', ch==='fb');
+    calc();
+  }
+  $('chTiktok').addEventListener('click', function(){ setChannel('tiktok'); });
+  $('chFb').addEventListener('click', function(){ setChannel('fb'); });
+
+  // wire pairs
+  pair('costRange','costNum',calc,false);
+  pair('priceRange','priceNum',calc,false);
+  pair('qtyRange','qtyNum',calc,false);
+  pair('strRange','strNum',calc,false);
+  ['feePct','procFee','packFee','steamFee'].forEach(function(id){
+    $(id).addEventListener('input', calc);
+  });
+
+  calc();
+})();
+</script>

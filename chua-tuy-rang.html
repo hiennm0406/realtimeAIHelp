@@ -1,0 +1,452 @@
+<title>Quy trình mở tủy & chữa tủy răng</title>
+<style>
+  :root {
+    --ground: #F6F9F9;
+    --surface: #FFFFFF;
+    --surface-warm: #EDF3F3;
+    --ink: #2A343A;
+    --ink-soft: #586770;
+    --ink-faint: #8A979E;
+    --accent: #2E8B94;
+    --accent-deep: #1F6169;
+    --accent-soft: #DCEDEE;
+    --danger: #C0492F;
+    --danger-deep: #94341F;
+    --danger-soft: #FBE6E0;
+    --safe: #4E8A6B;
+    --safe-soft: #E1EFE7;
+    --border: #DCE6E6;
+    --shadow: 0 1px 2px rgba(42,52,58,.04), 0 8px 24px rgba(42,52,58,.06);
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(1.4rem, 4vw, 3.2rem) clamp(1.1rem, 4vw, 2rem) 4rem;
+  }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    text-align: center;
+    padding: 1.2rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2.4rem;
+  }
+  .eyebrow {
+    font-size: .72rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 1rem;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 6vw, 2.7rem);
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+    color: var(--ink);
+  }
+  .masthead p {
+    max-width: 33rem;
+    margin: 0 auto;
+    color: var(--ink-soft);
+    font-size: 1.02rem;
+  }
+
+  /* ---- Sections ---- */
+  section { margin-bottom: 2.9rem; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+    margin: 0 0 1.1rem;
+    padding-bottom: .55rem;
+    border-bottom: 2px solid var(--accent-soft);
+  }
+  .sec-num {
+    font-family: var(--serif);
+    font-size: 1rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .sec-head h2 {
+    font-family: var(--serif);
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  p { margin: 0 0 1rem; }
+  strong { color: var(--accent-deep); font-weight: 600; }
+
+  ul { margin: 0 0 1rem; padding-left: 0; list-style: none; }
+  li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: .6rem;
+  }
+  li::before {
+    content: "";
+    position: absolute;
+    left: .25rem;
+    top: .68em;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  li.plus::before { background: var(--safe); }
+  li.no::before {
+    content: "";
+    background: none;
+    left: .2rem;
+    top: .5em;
+    width: .7rem; height: .7rem;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* ---- Callouts ---- */
+  .callout {
+    border-radius: 12px;
+    padding: 1.2rem 1.3rem;
+    margin: 0 0 1.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .callout h3 {
+    margin: 0 0 .7rem;
+    font-family: var(--sans);
+    font-size: .82rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .callout p:last-child, .callout ul:last-child, .callout li:last-child { margin-bottom: 0; }
+
+  .callout--danger {
+    background: var(--danger-soft);
+    border: 1px solid #EBC4BC;
+    border-left: 5px solid var(--danger);
+  }
+  .callout--danger h3 { color: var(--danger-deep); }
+  .callout--danger strong { color: var(--danger-deep); }
+  .callout--danger li::before { background: var(--danger); }
+
+  .callout--safe {
+    background: var(--safe-soft);
+    border: 1px solid #C6DDCF;
+    border-left: 5px solid var(--safe);
+  }
+  .callout--safe h3 { color: #3B6A50; }
+  .callout--safe li::before { background: var(--safe); }
+
+  .callout--warm {
+    background: var(--surface-warm);
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--accent);
+  }
+  .callout--warm h3 { color: var(--accent-deep); }
+
+  /* ---- Steps ---- */
+  .steps { counter-reset: step; margin: 0 0 1.4rem; padding: 0; list-style: none; }
+  .steps > li {
+    position: relative;
+    counter-increment: step;
+    padding: 0 0 1.3rem 3.2rem;
+    margin: 0;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    width: 2.1rem; height: 2.1rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    border-radius: 50%;
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .steps > li::after {
+    content: "";
+    position: absolute;
+    left: 1.05rem; top: 2.3rem; bottom: -.2rem;
+    width: 2px;
+    background: var(--accent-soft);
+  }
+  .steps > li:last-child { padding-bottom: 0; }
+  .steps > li:last-child::after { display: none; }
+  .steps h3 {
+    margin: .15rem 0 .35rem;
+    font-family: var(--sans);
+    font-size: 1.04rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .steps p { margin: 0; color: var(--ink-soft); font-size: .98rem; }
+  .steps .flag {
+    display: inline-block;
+    font-size: .68rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--accent-deep);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: .05rem .55rem;
+    margin-left: .4rem;
+    vertical-align: middle;
+  }
+  .step-key { background: var(--surface-warm); border-radius: 12px; padding: 1.3rem 1.3rem .1rem; border: 1px solid var(--border); }
+  .step-key .steps > li:last-child { padding-bottom: 1.2rem; }
+
+  /* ---- Table ---- */
+  .table-scroll { overflow-x: auto; margin: 0 0 1rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    font-size: .96rem;
+    min-width: 22rem;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: .82rem;
+    color: var(--ink-faint);
+    padding: 0 0 .5rem;
+  }
+  th, td { text-align: left; padding: .75rem .95rem; vertical-align: top; }
+  thead th {
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  tbody tr + tr td { border-top: 1px solid var(--border); }
+  td.when { font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* ---- Closing note ---- */
+  .closing {
+    background: linear-gradient(180deg, var(--accent-soft), var(--surface-warm));
+    border-radius: 14px;
+    padding: 1.6rem 1.5rem;
+    text-align: center;
+    margin: 2.6rem 0 2rem;
+    border: 1px solid var(--border);
+  }
+  .closing p { color: var(--accent-deep); margin: 0; font-size: 1.05rem; }
+  .closing .serif { font-family: var(--serif); font-style: italic; }
+
+  /* ---- Sources & footer ---- */
+  .sources { margin-top: 2.4rem; padding-top: 1.4rem; border-top: 1px solid var(--border); }
+  .sources h2 {
+    font-family: var(--sans);
+    font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 700; margin: 0 0 .8rem;
+  }
+  .sources ul { font-size: .9rem; }
+  .sources li { margin-bottom: .45rem; }
+  .sources li::before { background: var(--ink-faint); top: .62em; }
+  .sources a { color: var(--accent-deep); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  .sources a:hover, .sources a:focus { border-bottom-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .disclaimer {
+    font-size: .84rem;
+    color: var(--ink-faint);
+    background: var(--surface-warm);
+    border-radius: 10px;
+    padding: .9rem 1.1rem;
+    margin-top: 1.6rem;
+    line-height: 1.6;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Hướng dẫn chuyên khoa · Nội nha</p>
+    <h1>Quy trình mở tủy &amp; chữa tủy răng</h1>
+    <p>Khi tủy răng bị viêm hoặc chết do sâu răng, nứt vỡ hay chấn thương, chữa tủy (điều trị nội nha) giúp làm sạch nhiễm trùng và <strong>giữ lại răng thật</strong> thay vì phải nhổ. Đây là toàn bộ quy trình từng bước, chăm sóc sau điều trị và những điều cần lưu ý — tổng hợp từ các nguồn y khoa uy tín (AAE, Mayo Clinic, Cleveland Clinic, NHS).</p>
+  </header>
+
+  <section>
+    <div class="callout callout--danger">
+      <h3>⚠ Cần đến nha sĩ / cấp cứu ngay nếu có</h3>
+      <ul>
+        <li><strong>Sưng lan ra mặt, má, cổ hoặc quanh mắt</strong> — dấu hiệu áp-xe răng đang lan rộng.</li>
+        <li><strong>Sốt, ớn lạnh</strong> kèm đau răng.</li>
+        <li><strong>Khó nuốt, khó thở, khó mở miệng</strong> — nhiễm trùng răng có thể lan xuống vùng cổ, cần <strong>cấp cứu</strong>.</li>
+        <li><strong>Đau răng dữ dội không giảm dù đã uống thuốc giảm đau</strong>, hoặc kéo dài hơn 2 ngày.</li>
+        <li><strong>Nổi mụn mủ ở nướu, chảy mủ, vị hôi lạ trong miệng.</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Chữa tủy là gì &amp; khi nào cần</h2></div>
+    <p>Bên trong mỗi chiếc răng có <strong>buồng tủy</strong> chứa mạch máu và dây thần kinh. Khi tủy bị <strong>viêm (viêm tủy)</strong> hoặc nhiễm trùng, vi khuẩn sinh sôi bên trong ống tủy gây đau và có thể tạo áp-xe ở chóp răng. Chữa tủy nhằm <strong>loại bỏ vi khuẩn khỏi ống tủy, ngăn tái nhiễm và bảo tồn răng thật</strong>.</p>
+    <p>Các dấu hiệu gợi ý răng cần chữa tủy:</p>
+    <ul>
+      <li><strong>Đau răng tự phát, đau nhói âm ỉ</strong>, thường tăng về đêm.</li>
+      <li><strong>Ê buốt kéo dài với nóng hoặc lạnh</strong> — vẫn buốt hơn 30 giây sau khi đã ngừng kích thích.</li>
+      <li><strong>Đau khi nhai hoặc cắn</strong> lên răng.</li>
+      <li><strong>Răng đổi màu sẫm</strong> hơn các răng bên cạnh.</li>
+      <li><strong>Sưng nướu quanh răng, nổi mụn mủ (lỗ rò)</strong> ở nướu.</li>
+      <li>Răng bị <strong>sâu sâu, nứt vỡ, chấn thương</strong>, hoặc đã trám/điều trị nhiều lần.</li>
+    </ul>
+    <div class="callout callout--warm">
+      <h3>Theo khuyến cáo NHS</h3>
+      <p style="margin:0">Hãy đi khám nếu đau răng <strong>kéo dài hơn 2 ngày</strong>, không đỡ khi dùng thuốc giảm đau, hoặc kèm <strong>sưng, đau khi cắn, nướu đỏ, vị hôi lạ</strong> trong miệng. Viêm tủy không điều trị sẽ nặng dần và có thể dẫn tới <strong>mất răng</strong>.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Quy trình mở tủy &amp; chữa tủy từng bước</h2></div>
+    <p>Toàn bộ quá trình thường được thực hiện dưới gây tê tại chỗ nên gần như <strong>không đau</strong>. Các bước cơ bản như sau:</p>
+    <ol class="steps">
+      <li>
+        <h3>Thăm khám &amp; chụp X-quang</h3>
+        <p>Bác sĩ khám và chụp phim (đôi khi là CT Cone Beam) để đánh giá mức độ tổn thương tủy, số lượng và hình dạng ống tủy, cũng như tình trạng viêm nhiễm quanh chóp răng.</p>
+      </li>
+      <li>
+        <h3>Gây tê tại chỗ</h3>
+        <p>Tiêm tê để vùng răng hoàn toàn tê trong suốt quá trình. Với răng đã chết tủy, đôi khi gần như không cần tê.</p>
+      </li>
+      <li>
+        <h3>Đặt đê cao su (rubber dam)</h3>
+        <p>Một tấm cao su mỏng cô lập răng cần điều trị: giữ răng <strong>sạch và khô</strong>, ngăn nước bọt cùng vi khuẩn, và tránh nuốt hay hít phải dụng cụ nhỏ, dung dịch bơm rửa.</p>
+      </li>
+      <li>
+        <h3>Mở tủy — mở đường vào buồng tủy <span class="flag">Bước then chốt</span></h3>
+        <p>Bác sĩ dùng mũi khoan tạo một lỗ nhỏ qua <strong>mặt nhai</strong> (với răng hàm) hoặc <strong>mặt trong</strong> (với răng cửa), mở thẳng vào buồng tủy để tiếp cận các ống tủy. Đây chính là bước "mở tủy".</p>
+      </li>
+      <li>
+        <h3>Lấy tủy</h3>
+        <p>Loại bỏ toàn bộ mô tủy viêm hoặc hoại tử cùng vi khuẩn ra khỏi buồng tủy và các ống tủy.</p>
+      </li>
+      <li>
+        <h3>Làm sạch &amp; tạo hình ống tủy</h3>
+        <p>Dùng các cây trâm nội nha rất nhỏ và dẻo (thường là trâm máy xoay) để nong rộng, tạo hình ống tủy. Đồng thời <strong>bơm rửa liên tục bằng dung dịch sát khuẩn</strong> (natri hypochlorite) để hòa tan mô vụn và diệt khuẩn sâu trong các ống ngà. Chiều dài ống tủy thường được đo bằng máy định vị chóp.</p>
+      </li>
+      <li>
+        <h3>Trám bít ống tủy (hàn tủy)</h3>
+        <p>Sau khi ống tủy đã sạch và khô, bác sĩ trám kín hệ thống ống tủy bằng vật liệu <strong>gutta-percha</strong> kết hợp chất gắn (sealer), tạo lớp bít khít ngăn vi khuẩn quay trở lại. Bước này gọi là <em>obturation</em>.</p>
+      </li>
+      <li>
+        <h3>Trám phục hồi tạm thời</h3>
+        <p>Trám tạm bịt kín lỗ mở tủy để bảo vệ răng trong lúc chờ phục hình vĩnh viễn (nếu chưa thực hiện ngay trong buổi hẹn).</p>
+      </li>
+      <li>
+        <h3>Phục hình vĩnh viễn — bọc mão (chụp) răng</h3>
+        <p>Răng đã chữa tủy trở nên <strong>giòn và dễ vỡ</strong> hơn. Thường cần bọc mão, đặc biệt với răng hàm chịu lực nhai lớn, để bảo vệ và phục hồi chức năng lâu dài (xem mục 05).</p>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Số lần hẹn &amp; thời gian điều trị</h2></div>
+    <div class="table-scroll">
+      <table>
+        <caption>Ước lượng — thay đổi tùy răng và mức độ nhiễm trùng</caption>
+        <thead>
+          <tr><th scope="col">Yếu tố</th><th scope="col">Thường gặp</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="when">Số lần hẹn</td><td>Có thể xong trong <strong>1 buổi</strong>, hoặc chia <strong>2–3 buổi</strong> nếu răng nhiều ống tủy hoặc nhiễm trùng nặng.</td></tr>
+          <tr><td class="when">Mỗi buổi</td><td>Khoảng <strong>30–90 phút</strong> tùy độ phức tạp.</td></tr>
+          <tr><td class="when">Nhiễm trùng nặng</td><td>Bác sĩ có thể <strong>đặt thuốc sát khuẩn trong ống tủy</strong> và hẹn quay lại để trám bít sau khi ổ nhiễm trùng lắng xuống.</td></tr>
+          <tr><td class="when">Bọc mão</td><td>Thường thực hiện ở buổi hẹn <strong>sau khi hoàn tất chữa tủy</strong>, cần thêm 1–2 lần hẹn để lấy dấu và gắn mão.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Chăm sóc &amp; hồi phục sau điều trị</h2></div>
+    <p>Phần lớn hồi phục trong <strong>vài ngày đến 1 tuần</strong>. Sau khi hết thuốc tê, cảm giác <strong>ê buốt, đau nhẹ hoặc căng tức ở hàm</strong> vài ngày đầu là bình thường.</p>
+    <div class="callout callout--safe">
+      <h3>✓ Nên làm</h3>
+      <ul>
+        <li class="plus"><strong>Giảm đau bằng paracetamol hoặc ibuprofen</strong> theo hướng dẫn — cơn đau thường dịu dần trong vòng 1 tuần.</li>
+        <li class="plus"><strong>1–2 ngày đầu ăn đồ mềm</strong>, tránh nhai trực tiếp lên răng vừa điều trị — nhất là khi mới trám tạm hoặc chưa bọc mão (răng dễ nứt vỡ).</li>
+        <li class="plus"><strong>Vệ sinh răng miệng bình thường</strong>: chải răng nhẹ nhàng và dùng chỉ nha khoa như thường lệ.</li>
+        <li class="plus"><strong>Đi khám lại theo hẹn</strong> để kiểm tra và hoàn tất bọc mão bảo vệ răng.</li>
+      </ul>
+    </div>
+    <ul>
+      <li class="no"><strong>Không nhai đồ cứng, dai</strong> (đá, kẹo cứng, xương) bằng răng đang điều trị cho tới khi bọc mão xong.</li>
+      <li class="no"><strong>Không tự ý dùng kháng sinh</strong> khi chưa có chỉ định của bác sĩ.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Bọc mão — bảo vệ răng sau chữa tủy</h2></div>
+    <p>Đây là bước dễ bị bỏ qua nhưng rất quan trọng. Sau khi lấy tủy, răng <strong>không còn được nuôi dưỡng</strong> nên giòn và dễ nứt vỡ hơn dưới lực nhai.</p>
+    <ul>
+      <li><strong>Bọc mão (chụp răng)</strong> giúp phục hồi độ chắc và bảo vệ răng khỏi gãy vỡ, đặc biệt với <strong>răng hàm</strong> chịu lực nhai lớn.</li>
+      <li>Trám tạm chỉ là giải pháp <strong>tạm thời</strong> — cần phục hình vĩnh viễn đúng hẹn để tránh răng vỡ hoặc tái nhiễm.</li>
+      <li>Răng đã chữa tủy và phục hình tốt có thể <strong>tồn tại nhiều năm, thậm chí suốt đời</strong> nếu chăm sóc và khám răng định kỳ.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Dấu hiệu bất thường sau điều trị</h2></div>
+    <div class="callout callout--danger">
+      <h3>⚠ Liên hệ nha sĩ nếu sau vài ngày vẫn có</h3>
+      <ul>
+        <li><strong>Đau tăng lên hoặc sưng nề</strong> thay vì giảm dần.</li>
+        <li><strong>Sưng mặt hoặc nướu, sốt</strong> trở lại.</li>
+        <li><strong>Trám tạm bị bong ra</strong> hoặc miếng trám rơi mất.</li>
+        <li><strong>Khớp cắn cộm, vênh</strong> khó chịu kéo dài (có thể cần chỉnh khớp cắn).</li>
+        <li><strong>Nổi mẩn, ngứa, khó thở</strong> — dấu hiệu dị ứng thuốc.</li>
+        <li>Răng <strong>đau trở lại sau một thời gian dài</strong> — có thể cần <strong>chữa tủy lại</strong> (điều trị nội nha lại) hoặc can thiệp khác.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="closing">
+    <p><span class="serif">Chữa tủy đúng cách giúp giữ lại răng thật của bạn — hãy hoàn tất đủ các bước, kể cả bọc mão, và tái khám đúng hẹn.</span></p>
+  </div>
+
+  <div class="sources">
+    <h2>Nguồn tham khảo</h2>
+    <ul>
+      <li><a href="https://www.aae.org/patients/root-canal-treatment/what-is-a-root-canal/">What is a Root Canal? — American Association of Endodontists (AAE)</a></li>
+      <li><a href="https://www.aae.org/patients/root-canal-treatment/what-is-a-root-canal/root-canal-explained/">Root Canal Explained: Step-by-Step — AAE</a></li>
+      <li><a href="https://www.mayoclinic.org/diseases-conditions/tooth-abscess/in-depth/root-canal/art-20585454">Root canal treatment — Mayo Clinic</a></li>
+      <li><a href="https://my.clevelandclinic.org/health/treatments/21759-root-canal">Root Canal: Procedure &amp; Recovery — Cleveland Clinic</a></li>
+      <li><a href="https://my.clevelandclinic.org/health/diseases/23536-pulpitis">Pulpitis: Types, Symptoms &amp; Treatment — Cleveland Clinic</a></li>
+      <li><a href="https://www.nhs.uk/conditions/root-canal-treatment/">Root canal treatment — NHS</a></li>
+      <li><a href="https://www.merckmanuals.com/professional/dental-disorders/common-dental-disorders/pulpitis">Pulpitis — Merck Manual (Professional)</a></li>
+    </ul>
+    <p class="disclaimer">Bản hướng dẫn này mang tính tham khảo, tổng hợp từ các nguồn y khoa uy tín, <strong>không thay thế chẩn đoán và chỉ định của nha sĩ / bác sĩ chuyên khoa Răng Hàm Mặt</strong> trực tiếp thăm khám cho bạn. Khi có bất kỳ dấu hiệu bất thường nào, hãy liên hệ cơ sở y tế.</p>
+  </div>
+
+</div>

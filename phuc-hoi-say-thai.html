@@ -1,0 +1,372 @@
+<title>Chăm sóc & hồi phục sau sảy thai</title>
+<style>
+  :root {
+    --ground: #FAF6F2;
+    --surface: #FFFFFF;
+    --surface-warm: #F4EBE4;
+    --ink: #3B323A;
+    --ink-soft: #6E626A;
+    --ink-faint: #938891;
+    --accent: #9E6B7E;
+    --accent-deep: #7E4F62;
+    --accent-soft: #EFE1E8;
+    --danger: #B24133;
+    --danger-deep: #8F3125;
+    --danger-soft: #F8E5E0;
+    --safe: #5E8168;
+    --safe-soft: #E4EDE5;
+    --border: #E7DBD3;
+    --shadow: 0 1px 2px rgba(59,50,58,.04), 0 8px 24px rgba(59,50,58,.06);
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.72;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(1.4rem, 4vw, 3.2rem) clamp(1.1rem, 4vw, 2rem) 4rem;
+  }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    text-align: center;
+    padding: 1.2rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2.4rem;
+  }
+  .eyebrow {
+    font-size: .72rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 1rem;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 6vw, 2.7rem);
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+    color: var(--ink);
+  }
+  .masthead p {
+    max-width: 32rem;
+    margin: 0 auto;
+    color: var(--ink-soft);
+    font-size: 1.02rem;
+  }
+
+  /* ---- Sections ---- */
+  section { margin-bottom: 2.9rem; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+    margin: 0 0 1.1rem;
+    padding-bottom: .55rem;
+    border-bottom: 2px solid var(--accent-soft);
+  }
+  .sec-num {
+    font-family: var(--serif);
+    font-size: 1rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .sec-head h2 {
+    font-family: var(--serif);
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  p { margin: 0 0 1rem; }
+  strong { color: var(--accent-deep); font-weight: 600; }
+
+  ul { margin: 0 0 1rem; padding-left: 0; list-style: none; }
+  li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: .6rem;
+  }
+  li::before {
+    content: "";
+    position: absolute;
+    left: .25rem;
+    top: .68em;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  li.plus::before { background: var(--safe); }
+  li.no::before {
+    content: "";
+    background: none;
+    left: .2rem;
+    top: .5em;
+    width: .7rem; height: .7rem;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* ---- Callouts ---- */
+  .callout {
+    border-radius: 12px;
+    padding: 1.2rem 1.3rem;
+    margin: 0 0 1.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .callout h3 {
+    margin: 0 0 .7rem;
+    font-family: var(--sans);
+    font-size: .82rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .callout p:last-child, .callout ul:last-child, .callout li:last-child { margin-bottom: 0; }
+
+  .callout--danger {
+    background: var(--danger-soft);
+    border: 1px solid #EBC4BC;
+    border-left: 5px solid var(--danger);
+  }
+  .callout--danger h3 { color: var(--danger-deep); }
+  .callout--danger strong { color: var(--danger-deep); }
+  .callout--danger li::before { background: var(--danger); }
+
+  .callout--safe {
+    background: var(--safe-soft);
+    border: 1px solid #CBDDCE;
+    border-left: 5px solid var(--safe);
+  }
+  .callout--safe h3 { color: #3F6149; }
+  .callout--safe li::before { background: var(--safe); }
+
+  .callout--warm {
+    background: var(--surface-warm);
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--accent);
+  }
+  .callout--warm h3 { color: var(--accent-deep); }
+
+  /* ---- Table ---- */
+  .table-scroll { overflow-x: auto; margin: 0 0 1rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    font-size: .96rem;
+    min-width: 22rem;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: .82rem;
+    color: var(--ink-faint);
+    padding: 0 0 .5rem;
+  }
+  th, td { text-align: left; padding: .75rem .95rem; vertical-align: top; }
+  thead th {
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  tbody tr + tr td { border-top: 1px solid var(--border); }
+  td.when { font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  /* ---- Closing note ---- */
+  .closing {
+    background: linear-gradient(180deg, var(--accent-soft), var(--surface-warm));
+    border-radius: 14px;
+    padding: 1.6rem 1.5rem;
+    text-align: center;
+    margin: 2.6rem 0 2rem;
+    border: 1px solid var(--border);
+  }
+  .closing p { color: var(--accent-deep); margin: 0; font-size: 1.05rem; }
+  .closing .serif { font-family: var(--serif); font-style: italic; }
+
+  /* ---- Sources & footer ---- */
+  .sources { margin-top: 2.4rem; padding-top: 1.4rem; border-top: 1px solid var(--border); }
+  .sources h2 {
+    font-family: var(--sans);
+    font-size: .78rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 700; margin: 0 0 .8rem;
+  }
+  .sources ul { font-size: .9rem; }
+  .sources li { margin-bottom: .45rem; }
+  .sources li::before { background: var(--ink-faint); top: .62em; }
+  .sources a { color: var(--accent-deep); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  .sources a:hover, .sources a:focus { border-bottom-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .disclaimer {
+    font-size: .84rem;
+    color: var(--ink-faint);
+    background: var(--surface-warm);
+    border-radius: 10px;
+    padding: .9rem 1.1rem;
+    margin-top: 1.6rem;
+    line-height: 1.6;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Hướng dẫn chăm sóc</p>
+    <h1>Chăm sóc &amp; hồi phục sau sảy thai</h1>
+    <p>Sau khi thai tự ra ngoài, cơ thể và tinh thần bạn đều cần thời gian để lành lại. Đây là những điều cần theo dõi, cách chăm sóc và những gì nên kiêng — tổng hợp từ các nguồn y khoa uy tín (ACOG, NHS, Mayo Clinic, Cleveland Clinic).</p>
+  </header>
+
+  <section>
+    <div class="callout callout--danger">
+      <h3>⚠ Phải đến bệnh viện NGAY nếu có</h3>
+      <ul>
+        <li><strong>Ra máu quá nhiều:</strong> ướt đẫm hơn <strong>2 băng vệ sinh lớn mỗi giờ, kéo dài từ 2 giờ trở lên</strong>.</li>
+        <li><strong>Ra cục máu đông lớn</strong> liên tục.</li>
+        <li><strong>Sốt trên 38°C, ớn lạnh</strong>, hoặc <strong>dịch âm đạo có mùi hôi</strong> — dấu hiệu nhiễm trùng.</li>
+        <li><strong>Đau bụng dữ dội</strong> không giảm dù đã uống thuốc giảm đau.</li>
+        <li><strong>Chóng mặt, ngất xỉu, mệt lả, tim đập nhanh</strong> — dấu hiệu mất máu nhiều.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Những gì là bình thường</h2></div>
+    <p>Ra máu và đau bụng lâm râm sau sảy thai là điều dự kiến. Biết trước diễn tiến bình thường giúp bạn phân biệt với dấu hiệu bất thường ở trên.</p>
+    <div class="table-scroll">
+      <table>
+        <caption>Diễn tiến hồi phục thể chất thường gặp</caption>
+        <thead>
+          <tr><th scope="col">Thời gian</th><th scope="col">Điều thường xảy ra</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="when">2–4 giờ đầu</td><td>Ra máu nhiều nhất kèm đau quặn bụng khi thai và mô ra ngoài, sau đó giảm dần.</td></tr>
+          <tr><td class="when">10–14 ngày</td><td>Ra máu giảm rõ, nhẹ dần giống như một kỳ kinh nguyệt.</td></tr>
+          <tr><td class="when">4–6 tuần</td><td>Có thể còn ra máu lấm tấm/dịch nâu nhẹ rồi hết hẳn.</td></tr>
+          <tr><td class="when">4–8 tuần</td><td>Kinh nguyệt thường trở lại (có thể mất vài tháng để đều lại).</td></tr>
+          <tr><td class="when">Ngay tháng đầu</td><td>Có thể <strong>rụng trứng trước cả kỳ kinh đầu tiên</strong> → có khả năng mang thai lại sớm.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Đau bụng lâm râm nhẹ có thể dịu bằng <strong>paracetamol</strong> và chườm ấm. Phần lớn chị em hồi phục thể chất và trở lại sinh hoạt nhẹ nhàng chỉ sau một vài ngày.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Cần kiêng &amp; tránh</h2></div>
+    <div class="callout callout--warm">
+      <h3>Quan trọng nhất — phòng nhiễm trùng</h3>
+      <p style="margin:0"><strong>Không đưa bất cứ thứ gì vào âm đạo trong ít nhất 1–2 tuần</strong>, cho đến khi hết hẳn ra máu: không quan hệ tình dục, không dùng tampon hay cốc nguyệt san, không thụt rửa âm đạo. Chỉ dùng <strong>băng vệ sinh</strong> để thấm máu.</p>
+    </div>
+    <ul>
+      <li class="no"><strong>Tránh bơi lội, ngâm bồn tắm, tắm suối/bể sục nước nóng</strong> khi còn ra máu — tắm vòi sen bình thường thì được.</li>
+      <li class="no"><strong>Tránh vận động gắng sức, mang vác nặng, tập nặng</strong> trong những ngày đầu — nghe theo cơ thể, tránh việc gây đau.</li>
+      <li class="no"><strong>Không rượu bia, thuốc lá.</strong></li>
+      <li class="no"><strong>Không tự ý dùng thuốc</strong> (cầm máu, kháng sinh…) khi chưa hỏi bác sĩ. Về giảm đau, vì bạn có <strong>bệnh dạ dày</strong>, hãy ưu tiên <strong>paracetamol</strong> thay vì ibuprofen.</li>
+      <li class="no"><strong>Đừng tự trách hay gánh cảm giác tội lỗi</strong> — đây không phải "kiêng" thể chất, nhưng là điều quan trọng cho tinh thần bạn.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Chăm sóc cơ thể mỗi ngày</h2></div>
+    <div class="callout callout--safe">
+      <h3>✓ Nên làm</h3>
+      <ul>
+        <li class="plus"><strong>Nghỉ ngơi nhiều</strong> trong vài ngày đầu; giữ ấm cơ thể; ngủ đủ giấc.</li>
+        <li class="plus"><strong>Vệ sinh vùng kín nhẹ nhàng</strong>, thay băng vệ sinh thường xuyên, rửa tay trước và sau khi thay.</li>
+        <li class="plus"><strong>Giảm đau bằng paracetamol</strong> và chườm túi ấm lên bụng dưới.</li>
+        <li class="plus"><strong>Uống đủ nước, ăn đủ chất</strong>, ăn chia nhỏ bữa (phù hợp với dạ dày &amp; đại tràng của bạn).</li>
+        <li class="plus"><strong>Theo dõi nhiệt độ và lượng máu</strong> mỗi ngày để phát hiện sớm dấu hiệu bất thường.</li>
+        <li class="plus"><strong>Từ từ trở lại sinh hoạt</strong> khi thấy khỏe — vận động nhẹ nhàng giúp hồi phục nhanh hơn.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Dinh dưỡng để hồi phục</h2></div>
+    <p>Bạn vừa mất một lượng máu, nên dinh dưỡng lúc này tập trung vào <strong>bù máu và phục hồi mô</strong>:</p>
+    <ul>
+      <li><strong>Bổ sung sắt</strong> để bù máu: thịt bò, thịt nạc, gan, lòng đỏ trứng, rau xanh đậm, các loại đậu. Kết hợp <strong>vitamin C</strong> (cam, ổi, ớt chuông) để hấp thu sắt tốt hơn.</li>
+      <li><strong>Đạm (protein)</strong> giúp phục hồi cơ thể: thịt, cá, trứng, sữa, đậu hũ.</li>
+      <li><strong>Rau củ quả, thực phẩm giàu folate</strong>; có thể tiếp tục uống vitamin tổng hợp / axit folic.</li>
+      <li><strong>Ăn dễ tiêu, chia nhỏ bữa</strong>, hạn chế đồ cay–chua–dầu mỡ để đỡ kích ứng dạ dày và đại tràng.</li>
+      <li><strong>Uống đủ nước</strong>, có thể thêm sữa, sữa chua, canh/súp ấm.</li>
+    </ul>
+    <div class="callout callout--warm">
+      <h3>Về "kiêng cữ" truyền thống</h3>
+      <p style="margin:0">Giữ ấm, nghỉ ngơi và ăn uống đầy đủ là hợp lý. Nhưng <strong>không nên kiêng khem cực đoan hay nhịn ăn</strong> — cơ thể bạn đang cần đủ dinh dưỡng để lành lại. Ăn đa dạng, đủ chất mới giúp hồi phục tốt.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Tái khám &amp; xác nhận đã sạch</h2></div>
+    <p>Điều quan trọng ít người để ý: cần chắc chắn <strong>thai và mô đã ra hết</strong>. Nếu còn sót mô trong tử cung có thể gây <strong>chảy máu kéo dài hoặc nhiễm trùng</strong>.</p>
+    <ul>
+      <li>Nên <strong>tái khám theo hẹn</strong> để bác sĩ <strong>siêu âm kiểm tra buồng tử cung</strong> và/hoặc <strong>xét nghiệm beta-hCG</strong> xác nhận đã sạch.</li>
+      <li>Chỉ số <strong>beta-hCG sẽ giảm dần về 0</strong> trong vài tuần; nếu còn cao kéo dài, có thể còn sót mô cần xử trí.</li>
+      <li>Nếu <strong>ra máu kéo dài hơn 2–3 tuần</strong>, hoặc có dấu hiệu nhiễm trùng ở phần cảnh báo đỏ phía trên → đi khám ngay.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Hồi phục tinh thần</h2></div>
+    <p>Mất mát này là có thật, và nỗi buồn của bạn hoàn toàn chính đáng. Cảm giác <strong>buồn bã, hụt hẫng, sốc, giận dữ hay tội lỗi</strong> đều là phản ứng bình thường — thay đổi nội tiết sau sảy thai cũng khiến tâm trạng thất thường.</p>
+    <ul>
+      <li><strong>Cho phép mình được đau buồn</strong>, đừng ép bản thân "phải ổn ngay". Mỗi người cần thời gian khác nhau.</li>
+      <li><strong>Chia sẻ với chồng và người thân.</strong> Người chồng cũng có thể đang buồn — hãy cùng nhau vượt qua, đừng ai gánh một mình.</li>
+      <li><strong>Nhắc lại điều này: đây không phải lỗi của bạn.</strong> Phần lớn sảy thai sớm do bất thường nhiễm sắc thể ngẫu nhiên, không ai gây ra được.</li>
+      <li>Nếu nỗi buồn <strong>kéo dài, nặng nề, ảnh hưởng ăn ngủ và sinh hoạt</strong> → hãy tìm đến bác sĩ hoặc chuyên gia tâm lý. Đó là điều nên làm, không phải yếu đuối.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>Khi nào mang thai lại</h2></div>
+    <ul>
+      <li>Hãy đợi đến khi bạn thấy <strong>khỏe cả về thể chất lẫn tinh thần</strong>. Không có áp lực về thời gian.</li>
+      <li>Vì có thể <strong>rụng trứng sớm</strong>, nếu chưa muốn có thai lại ngay thì cần <strong>tránh thai</strong>. Nhiều bác sĩ khuyên chờ ít nhất <strong>một chu kỳ kinh</strong> (hoặc theo tư vấn riêng) trước khi thử lại.</li>
+      <li><strong>Chuẩn bị cho lần sau (cả hai vợ chồng):</strong> uống axit folic trước 1–3 tháng, điều trị ổn định bệnh dạ dày–đại tràng–trào ngược, khám tiền sản, ăn uống lành mạnh, bỏ rượu bia thuốc lá.</li>
+      <li><strong>Tin tốt:</strong> hầu hết phụ nữ sau một lần sảy thai sớm <strong>vẫn mang thai khỏe mạnh</strong> ở lần tiếp theo.</li>
+    </ul>
+  </section>
+
+  <div class="closing">
+    <p><span class="serif">Hãy nhẹ nhàng với chính mình. Bạn đã cố gắng rất nhiều, và bạn không hề đơn độc.</span></p>
+  </div>
+
+  <div class="sources">
+    <h2>Nguồn tham khảo</h2>
+    <ul>
+      <li><a href="https://www.nhs.uk/conditions/miscarriage/afterwards/">Miscarriage — Afterwards (NHS)</a></li>
+      <li><a href="https://www.acog.org/womens-health/experts-and-stories/the-latest/what-happens-after-a-miscarriage-an-ob-gyn-discusses-the-options">What Happens After a Miscarriage — ACOG</a></li>
+      <li><a href="https://www.mayoclinic.org/diseases-conditions/pregnancy-loss-miscarriage/diagnosis-treatment/drc-20354304">Miscarriage — Diagnosis &amp; Treatment (Mayo Clinic)</a></li>
+      <li><a href="https://my.clevelandclinic.org/health/diseases/9688-miscarriage">Miscarriage — Cleveland Clinic</a></li>
+      <li><a href="https://www.ncbi.nlm.nih.gov/books/NBK559071/">Incomplete Miscarriage — StatPearls, NCBI/NIH</a></li>
+      <li><a href="https://www.tommys.org/baby-loss-support/miscarriage-information-and-support/pregnancy-after-miscarriage/getting-pregnant-after-miscarriage">Trying Again After a Miscarriage — Tommy's</a></li>
+    </ul>
+    <p class="disclaimer">Bản hướng dẫn này mang tính tham khảo, tổng hợp từ các nguồn y khoa uy tín, <strong>không thay thế chẩn đoán và chỉ định của bác sĩ</strong> trực tiếp thăm khám cho bạn. Khi có bất kỳ dấu hiệu bất thường nào, hãy liên hệ cơ sở y tế.</p>
+  </div>
+
+</div>
