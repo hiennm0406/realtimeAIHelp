@@ -7,8 +7,7 @@
     </div>
 
     <p class="drawer__hint">
-      Paste the access token <code>bridge/server.py</code> printed on startup. That is
-      all a device needs — the bridge address is baked into this build.
+      Paste the access token <code>bridge/server.py</code> printed on startup. The bridge URL is set via <code>.env.local</code>.
     </p>
 
     <div class="drawer__fixed">
