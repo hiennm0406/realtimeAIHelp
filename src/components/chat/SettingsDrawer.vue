@@ -7,13 +7,8 @@
     </div>
 
     <p class="drawer__hint">
-      Paste the access token <code>bridge/server.py</code> printed on startup. The bridge URL is set via <code>.env.local</code>.
+      Paste the access token <code>bridge/server.py</code> printed on startup.
     </p>
-
-    <div class="drawer__fixed">
-      <span class="drawer__fixedlabel">Bridge</span>
-      <code class="drawer__fixedurl">{{ bridgeUrl }}</code>
-    </div>
 
     <label class="drawer__label" for="bridge-token">Access token</label>
     <input
@@ -116,7 +111,7 @@
 </template>
 
 <script>
-import { BRIDGE_URL, checkHealth } from '../../lib/bridge.js'
+import { checkHealth } from '../../lib/bridge.js'
 
 export default {
   props: {
@@ -126,7 +121,6 @@ export default {
   data() {
     return {
       form: { ...this.settings },
-      bridgeUrl: BRIDGE_URL,
       testing: false,
       testError: '',
       health: null,
@@ -195,33 +189,6 @@ export default {
   margin: 12px 0 6px;
   font-size: 12px;
   color: var(--muted);
-}
-
-/* The bridge address is a build-time constant, so it is shown for reference
-   rather than offered as a field. */
-.drawer__fixed {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel-2);
-}
-
-.drawer__fixedlabel {
-  flex: none;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.drawer__fixedurl {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 11.5px;
-  color: var(--text-soft);
 }
 
 .drawer__grid {
