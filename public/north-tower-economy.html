@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Phân tích tiến trình, tài nguyên, kinh tế và gói nạp của North Tower – Merge TD Defense 1.20.10 từ dữ liệu giải mã APK.">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font-size: 14px; font-family: system-ui, sans-serif; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>Kinh tế North Tower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (max 1000px) of report sections; data tables scroll inside their own box; charts sit in framed panels. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #e9eef4;
+  --ink: #111a23; --ink-2: #44515f; --muted: #6a7785; --line: #d8dfe7;
+  --accent: #1d5ba8; --accent-soft: #e2ecf8; --warn-soft: #fbefe6; --warn-ink: #8a3b10;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --ref: #7f8b97;
+  --f-display: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1318; --surface: #151c23; --surface-2: #1c252e;
+    --ink: #e7edf3; --ink-2: #b3bfcb; --muted: #8592a0; --line: #27323d;
+    --accent: #78b0f0; --accent-soft: #1a2a3b; --warn-soft: #2f2118; --warn-ink: #f2b68f;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --ref: #8794a1;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1318; --surface: #151c23; --surface-2: #1c252e;
+  --ink: #e7edf3; --ink-2: #b3bfcb; --muted: #8592a0; --line: #27323d;
+  --accent: #78b0f0; --accent-soft: #1a2a3b; --warn-soft: #2f2118; --warn-ink: #f2b68f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --ref: #8794a1;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.65; }
+.page { max-width: 1000px; margin: 0 auto; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: clamp(22px, 3vw, 28px); font-weight: 700; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.mono, code { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--surface-2); color: var(--ink); padding: 1px 5px; border-radius: 4px; }
+header.hero { display: flex; flex-direction: column; gap: 16px; }
+header.hero .lead { font-size: 17px; color: var(--ink-2); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+nav.toc a { font-size: 13px; text-decoration: none; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+section { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 16px; }
+section > header { display: flex; flex-direction: column; gap: 6px; border-top: 2px solid var(--ink); padding-top: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tile .v { font-family: var(--f-display); font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tile .k { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+@media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+ul.points, ol.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; max-width: 74ch; }
+ul.points li::marker { color: var(--accent); }
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.tbl table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.tbl th { text-align: left; font-weight: 600; color: var(--ink-2); background: var(--surface-2); padding: 8px 12px; white-space: nowrap; font-size: 12.5px; }
+.tbl td { padding: 7px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+.tbl .num { text-align: right; white-space: nowrap; }
+.tbl.unlock td:nth-child(3) { white-space: nowrap; }
+.chip { display: inline-block; font-size: 12px; background: var(--accent-soft); color: var(--ink); border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; }
+.chip.off { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+figure.chart { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figure.chart .title { font-weight: 600; font-size: 14.5px; }
+figure.chart .box { position: relative; height: 320px; }
+@media (max-width: 560px) { figure.chart .box { height: 260px; } }
+figure.chart figcaption { font-size: 12.5px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.bug { background: var(--warn-soft); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.bug h3 { color: var(--warn-ink); font-size: 15px; }
+.bugs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .bugs { grid-template-columns: minmax(0, 1fr); } }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--ink-2); }
+details[open] summary { margin-bottom: 10px; }
+details .tbl { border: none; }
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 0; }
+.muted { color: var(--muted); }
+footer { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 16px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+<header class="hero" id="top">
+  <div class="eyebrow">Phân tích từ dữ liệu giải mã · North Tower – Merge TD Defense 1.20.10 · Google Play · 14/11/2026</div>
+  <h1>Kinh tế North Tower</h1>
+  <p class="lead">Báo cáo dựng từ logic và config bên trong game. Mình tải APK từ Google Play trên LDPlayer, giải mã 16 package Lua, rồi đọc 494 file script và 174 bảng config. Các con số dưới đây được tính thẳng từ config. Chỗ nào là ước tính sẽ ghi rõ.</p>
+  <nav class="toc" aria-label="Mục lục">
+    <a href="#tom-tat">Tóm tắt</a><a href="#du-lieu">Cách lấy dữ liệu</a><a href="#vong-lap">Vòng lặp lõi</a><a href="#campaign">Campaign</a>
+    <a href="#mo-khoa">Mở khóa theo tiến trình</a><a href="#tai-nguyen">Tài nguyên</a><a href="#gold">Kinh tế gold</a><a href="#shard">Shard và rune</a>
+    <a href="#gem">Gem và gacha</a><a href="#late">Late game</a><a href="#nap">Monetization</a><a href="#goi-moc">Gói theo mốc</a>
+    <a href="#ads">Quảng cáo</a><a href="#liveops">Live-ops</a><a href="#loi">Lỗi và điểm lạ</a><a href="#bai-hoc">Bài học</a>
+  </nav>
+</header>
+
+<section id="tom-tat">
+  <header><span class="eyebrow">01</span><h2>Tóm tắt</h2></header>
+  <div class="tiles">
+    <div class="tile"><span class="v">1.330</span><span class="k">wave campaign trên 8 hành tinh, 63 khu</span></div>
+    <div class="tile"><span class="v">×250.000</span><span class="k">HP quái từ wave đầu tới wave cuối, trong khi gold mỗi wave chỉ tăng ×225</span></div>
+    <div class="tile"><span class="v">282</span><span class="k">gói nạp, giá từ $0,99 tới $99,99</span></div>
+    <div class="tile"><span class="v">$21.667</span><span class="k">tiền nạp ước tính để lên VIP 19 (cao nhất)</span></div>
+  </div>
+  <ul class="points">
+    <li><b>Lõi là merge idle.</b> Gold dùng để mua turret ngẫu nhiên, giá 100 + 20 mỗi lần mua, trần 2.000. Ghép 2 turret cùng loại, cùng sao thành 1 turret hơn 1 sao, tối đa 15★. Đây là chỗ tiêu gold duy nhất trong game.</li>
+    <li><b>Độ khó tăng theo cấp số nhân, phần thưởng tăng tuyến tính.</b> Khoảng chênh được lấp bằng các hệ thống phụ (shard, rune, gear, constellation, Island), tức là bằng thời gian hoặc tiền.</li>
+    <li><b>Gold là nút thắt không đáy.</b> Cả campaign cho 8,0 triệu gold, hoặc 27,9 triệu nếu xem ads nhân thưởng ở mọi wave. Một turret 15★ cần 32,8 triệu. Đủ 60 ô turret 15★ cần 1,97 tỷ.</li>
+    <li><b>Power là cổng cứng do server giữ.</b> Kết quả thắng bị từ chối nếu BattlePower thấp hơn yêu cầu của wave. Từ Fireland trở đi, yêu cầu này gần như đứng yên (45.247 lên 46.746), nên cổng thật lúc đó là độ khó trận.</li>
+    <li><b>Hết campaign thì không có chương mới.</b> Late game là 6 chế độ phụ có giới hạn lượt mỗi ngày, cộng các hệ idle (Island, Salvage, Alchemy). Thời gian lịch trở thành giới hạn chính, và VIP nới mọi giới hạn cùng lúc.</li>
+    <li><b>Monetization rất dày:</b>
+      <ul>
+        <li>26 chuỗi gói bật lên đúng lúc nút nâng cấp bị xám vì thiếu tài nguyên.</li>
+        <li>VIP 20 cấp, chỉ tăng bằng tiền nạp.</li>
+        <li>Piggy bank, thẻ trọn đời, và Furnace nhỏ giọt khóa gacha mỗi ngày.</li>
+      </ul>
+    </li>
+    <li><b>Ads chỉ là video có thưởng.</b> Nút ads sau mỗi trận thắng cộng thêm 2 lần thưởng (4 lần ở 325 wave boss) và không giới hạn số lần mỗi ngày.</li>
+    <li><b>Không có gói nội dung tải thêm ở các mốc sau.</b>
+      <ul>
+        <li>Server hot-update không có bản mới cho 1.20.10, và mọi bundle đều nằm sẵn trong APK.</li>
+        <li>Các gói nạp theo mốc đã nằm sẵn trong config, kích hoạt theo stage, cấp, sao, VIP hoặc số ngày từ khi tạo tài khoản.</li>
+        <li>Một số tính năng (Arcade, Dark Side) gắn với stage vượt wave cuối nên chưa mở được.</li>
+      </ul>
+    </li>
+  </ul>
+</section>
+
+<section id="du-lieu">
+  <header><span class="eyebrow">02</span><h2>Cách lấy dữ liệu</h2></header>
+  <ul class="points">
+    <li><b>Bản game:</b> <code>com.strategy.north.tower</code> bản 1.20.10 (Epoch Games / Lemix), cài từ Google Play trên LDPlayer 9. Engine là Unity 2022.3 IL2CPP, logic viết bằng xLua, asset dùng Addressables.</li>
+    <li><b>Package logic:</b> logic nằm trong 16 file ở <code>assets/Packages</code>.
+      <ul>
+        <li>Mỗi file là một zip mã hóa RC4.</li>
+        <li>Khóa giải mã được dẫn xuất từ tên file và số version, và nằm ngay trong client nên giải được toàn bộ.</li>
+        <li>Kết quả: 494 file, khôi phục được tên của 211 file.</li>
+      </ul>
+    </li>
+    <li><b>Config:</b> <code>Data/Config.lua</code> sinh bằng tabtoy, gồm 174 bảng, cộng phần code hậu xử lý ở cuối file. Có thêm <code>ConfigB</code> là biến thể của một A/B test về gói nạp, đã hết hạn từ 3/2023. Báo cáo này dùng Config chính.</li>
+    <li><b>Logic dùng chung client và server</b> (thư mục <code>Scripts/Shared</code>). Nhờ vậy đọc được trực tiếp công thức tính thưởng, kiểm tra gian lận và điều kiện bật gói.</li>
+    <li><b>CDN hot-update</b> <code>res.northtowergame.com</code>: manifest của 1.20.10 trùng với bản trong APK, còn 1.20.11 và 1.21.0 chưa tồn tại.</li>
+  </ul>
+</section>
+
+<section id="vong-lap">
+  <header><span class="eyebrow">03</span><h2>Vòng lặp lõi</h2></header>
+  <ul class="points">
+    <li><b>Bàn merge:</b> tháp chính đứng giữa, turret đặt trên 60 ô chia 4 vòng (AirGround, Ground, Assist).
+      <ul>
+        <li>Mỗi ô mở bằng 10 Base Scroll, tổng 600.</li>
+        <li>Ô chờ (bench) mở từ 13 lên 150 bằng Merger Slot Shard, 10 shard mỗi ô.</li>
+      </ul>
+    </li>
+    <li><b>Bốn trục unit:</b> 21 turret (5 phẩm chất), 4 Dragon (tháp chính), 5 Spell và 9 Hero.
+      <ul>
+        <li>Mỗi unit lên cấp bằng shard riêng, cả 39 unit chung một đường chi phí.</li>
+        <li>Trần cấp shard là 150. Sao và phẩm chất cộng thêm, đưa chỉ số tới cấp 250.</li>
+      </ul>
+    </li>
+    <li><b>Mua turret ngẫu nhiên theo trọng số:</b>
+      <ul>
+        <li>Bowman 2.200, còn turret đỏ chỉ 16–22.</li>
+        <li>Càng mở nhiều loại turret thì càng khó ra hai con trùng để ghép.</li>
+        <li>Đây là áp lực tự nhiên khiến người chơi muốn mua thẳng turret sao cao (2★ đến 6★, giá 4.000 tới 64.000 gold, đúng bằng giá ghép tay).</li>
+      </ul>
+    </li>
+    <li><b>BattlePower</b> = turret trên sân + Dragon đang dùng + mọi Spell + tối đa 6 Hero.
+      <ul>
+        <li>Nhân thêm hệ số từ constellation, gear, skin và gemstone.</li>
+        <li>Theo mô phỏng late game, hero chiếm khoảng 75% power, vì bảng chỉ số hero cao khoảng 12 lần turret.</li>
+      </ul>
+    </li>
+    <li><b>Khi báo thắng một wave,</b> server kiểm tra hai thứ: BattlePower ≥ UserCombat của wave, và gold trong trận không vượt trần của wave.</li>
+  </ul>
+</section>
+
+<section id="campaign">
+  <header><span class="eyebrow">04</span><h2>Tiến trình campaign</h2>
+  <p class="muted">Stage id = hành tinh × 10000 + khu × 100 + wave. Wave cuối là 81025 (Iceland-10 wave 25).</p></header>
+  <div class="tbl "><table><thead><tr><th>Hành tinh</th><th class=num>Khu</th><th class=num>Wave/khu</th><th class=num>Tổng wave</th><th class=num>HP quái cuối hành tinh</th><th class=num>Gold/wave cuối</th><th class=num>Gold tích lũy (không ads)</th><th class=num>Turret mua được</th></tr></thead><tbody><tr><td>Windland</td><td class=num>4</td><td class=num>10</td><td class=num>40</td><td class=num>×5,3</td><td class=num>340</td><td class=num>7.969</td><td class=num>24</td></tr><tr><td>Aqualand</td><td class=num>5</td><td class=num>10</td><td class=num>50</td><td class=num>×19,1</td><td class=num>938</td><td class=num>37.653</td><td class=num>57</td></tr><tr><td>Thunderland</td><td class=num>7</td><td class=num>15</td><td class=num>105</td><td class=num>×89,0</td><td class=num>1.699</td><td class=num>166.793</td><td class=num>128</td></tr><tr><td>Woodland</td><td class=num>8</td><td class=num>20</td><td class=num>160</td><td class=num>×202,7</td><td class=num>3.038</td><td class=num>600.989</td><td class=num>346</td></tr><tr><td>Mistland</td><td class=num>9</td><td class=num>25</td><td class=num>225</td><td class=num>×475,0</td><td class=num>4.808</td><td class=num>1.586.625</td><td class=num>838</td></tr><tr><td>Fireland</td><td class=num>10</td><td class=num>25</td><td class=num>250</td><td class=num>×2.205,5</td><td class=num>7.290</td><td class=num>3.059.048</td><td class=num>1.575</td></tr><tr><td>Sakuraland</td><td class=num>10</td><td class=num>25</td><td class=num>250</td><td class=num>×8.620,6</td><td class=num>8.788</td><td class=num>5.210.451</td><td class=num>2.650</td></tr><tr><td>Iceland</td><td class=num>10</td><td class=num>25</td><td class=num>250</td><td class=num>×25.040,9</td><td class=num>13.663</td><td class=num>8.012.673</td><td class=num>4.051</td></tr></tbody></table></div>
+  <figure class="chart" id="fig-growth">
+    <div class="title">Độ khó và gold mỗi wave, so với khu đầu tiên (thang log)</div>
+    <div class="box"><canvas id="c-growth" aria-label="Biểu đồ đường: HP quái và gold mỗi wave tăng bao nhiêu lần so với Windland-1, theo 63 khu" role="img"></canvas></div>
+    <figcaption>Nguồn: bảng EnemyGroup (EnemyHP), Region (L1Gold, L1GoldPass), Enemy (Gold). Gold mỗi wave = gold giết quái + thưởng thắng wave, tính trung bình theo khu.</figcaption>
+  </figure>
+  <ul class="points">
+    <li><b>Số wave mỗi khu tăng dần:</b> 10 (Windland, Aqualand), 15 (Thunderland), 20 (Woodland), rồi 25 (Mistland tới Iceland).</li>
+    <li><b>Wave boss:</b> 325 wave có hệ số ads là 4 (xem ads nhận thêm 4 lần thưởng thay vì 2). Thời gian tối đa một trận là 210 giây.</li>
+    <li><b>Thời lượng tối thiểu:</b> chỉ tính mỗi wave đánh một lần, phần trận đã khoảng 65 giờ. Thực tế lâu hơn nhiều, vì mỗi lần vấp tường power người chơi phải dừng lại farm.</li>
+    <li><b>Gold khi thua:</b> vẫn nhận gold đã nhặt trong trận, nhưng tối đa 10.000 gold mỗi ngày.</li>
+  </ul>
+</section>
+
+<section id="mo-khoa">
+  <header><span class="eyebrow">05</span><h2>Mở khóa theo tiến trình</h2>
+  <p class="muted">Từ bảng ModuleUnlock. "Wave thứ" là số thứ tự wave tính từ đầu campaign.</p></header>
+  <div class="note"><b>40 wave đầu (Windland) mở gần như toàn bộ phần nạp tiền.</b>
+    <ul class="points">
+      <li>Wave 26: VIP, Seasonal Golden Pass và Level Rewards pass.</li>
+      <li>Wave 31: gói nạp đầu, Growth Fund, thẻ trọn đời, skin và Arena.</li>
+      <li>Wave 41: gói ngày, tuần, tháng và sự kiện.</li>
+    </ul>
+    Từ đó tới cuối game chỉ thêm tính năng chơi mới: Gear, Behemoth, Yggdrasil, Endless.</div>
+  <div class="tbl unlock"><table><thead><tr><th>Stage id</th><th class=num>Wave thứ</th><th>Vị trí</th><th>Mở khóa</th></tr></thead><tbody><tr><td><span class="mono">10102</span></td><td class=num>2</td><td>Windland-1 wave 2</td><td><span class="chip">Chỉnh đội hình</span><span class="chip">Level Rewards (thưởng theo wave)</span></td></tr><tr><td><span class="mono">10103</span></td><td class=num>3</td><td>Windland-1 wave 3</td><td><span class="chip">Cài đặt</span></td></tr><tr><td><span class="mono">10104</span></td><td class=num>4</td><td>Windland-1 wave 4</td><td><span class="chip">Nâng cấp unit (Research)</span></td></tr><tr><td><span class="mono">10105</span></td><td class=num>5</td><td>Windland-1 wave 5</td><td><span class="chip">Tự bắn</span></td></tr><tr><td><span class="mono">10201</span></td><td class=num>11</td><td>Windland-2 wave 1</td><td><span class="chip">Sổ quái</span><span class="chip">Rương căn cứ</span><span class="chip">Shop</span><span class="chip">Chuỗi thành tựu PvP</span><span class="chip">Sự kiện nạp (mua liên tiếp)</span><span class="chip">Rương 2</span></td></tr><tr><td><span class="mono">10203</span></td><td class=num>13</td><td>Windland-2 wave 3</td><td><span class="chip">Nhiệm vụ 7 ngày</span><span class="chip">Explore / Colonize</span></td></tr><tr><td><span class="mono">10205</span></td><td class=num>15</td><td>Windland-2 wave 5</td><td><span class="chip">UFO shop</span></td></tr><tr><td><span class="mono">10206</span></td><td class=num>16</td><td>Windland-2 wave 6</td><td><span class="chip">Thưởng theo mốc</span><span class="chip">Nút ads nhân thưởng wave</span><span class="chip">Island (căn cứ)</span></td></tr><tr><td><span class="mono">10208</span></td><td class=num>18</td><td>Windland-2 wave 8</td><td><span class="chip">Plunder</span></td></tr><tr><td><span class="mono">10209</span></td><td class=num>19</td><td>Windland-2 wave 9</td><td><span class="chip">AD Tower</span></td></tr><tr><td><span class="mono">10301</span></td><td class=num>21</td><td>Windland-3 wave 1</td><td><span class="chip">Tab sự kiện</span><span class="chip">Thành tựu Dragon</span><span class="chip">Thành tựu turret</span><span class="chip">Thành tựu spell</span><span class="chip">Portal of Impasse</span><span class="chip">Tăng tốc cảng</span><span class="chip">Nhiệm vụ</span></td></tr><tr><td><span class="mono">10302</span></td><td class=num>22</td><td>Windland-3 wave 2</td><td><span class="chip">Mời đánh giá app</span></td></tr><tr><td><span class="mono">10303</span></td><td class=num>23</td><td>Windland-3 wave 3</td><td><span class="chip">Wharf / Salvage</span><span class="chip">Piggy bank (Safe)</span></td></tr><tr><td><span class="mono">10306</span></td><td class=num>26</td><td>Windland-3 wave 6</td><td><span class="chip">World Boss War</span><span class="chip">VIP</span><span class="chip">Seasonal Golden Pass</span><span class="chip">Level Rewards pass trả phí</span></td></tr><tr><td><span class="mono">10401</span></td><td class=num>31</td><td>Windland-4 wave 1</td><td><span class="chip">Skin</span><span class="chip">Thẻ trọn đời</span><span class="chip">Growth Fund</span><span class="chip">Thành tựu Island</span><span class="chip">Thành tựu hero</span><span class="chip">Tăng tốc</span><span class="chip">Alchemy Workshop</span><span class="chip">Arena</span><span class="chip">Gói nạp đầu</span></td></tr><tr><td><span class="mono">20101</span></td><td class=num>41</td><td>Aqualand-1 wave 1</td><td><span class="chip">Sự kiện</span><span class="chip">Sự kiện dài</span><span class="chip">Gói mới</span><span class="chip">Gói tháng</span><span class="chip">Gói ngày</span><span class="chip">Gói tuần</span><span class="chip">League (guild)</span><span class="chip">Thành tựu World Boss</span><span class="chip">Thành tựu tiêu gem</span><span class="chip">Thành tựu Planet War</span><span class="chip">Tăng tốc trận</span><span class="chip">Planet War (đã tắt)</span><span class="chip">Star War (đã tắt)</span><span class="chip">Thành tựu từng hero</span></td></tr><tr><td><span class="mono">20201</span></td><td class=num>51</td><td>Aqualand-2 wave 1</td><td><span class="chip">Tự ghép turret</span><span class="chip">Nhiều đội hình</span><span class="chip">Tự dùng spell (VIP 4)</span><span class="chip">Vòng sự kiện nạp</span></td></tr><tr><td><span class="mono">20301</span></td><td class=num>61</td><td>Aqualand-3 wave 1</td><td><span class="chip">Thành tựu gear</span><span class="chip">Gear forge (Commander)</span></td></tr><tr><td><span class="mono">20401</span></td><td class=num>71</td><td>Aqualand-4 wave 1</td><td><span class="chip">Hero Growth Fund</span></td></tr><tr><td><span class="mono">30101</span></td><td class=num>91</td><td>Thunderland-1 wave 1</td><td><span class="chip">Behemoth</span><span class="chip">Yggdrasil</span></td></tr><tr><td><span class="mono">30401</span></td><td class=num>136</td><td>Thunderland-4 wave 1</td><td><span class="chip">Trang bị skill</span></td></tr><tr><td><span class="mono">40101</span></td><td class=num>196</td><td>Woodland-1 wave 1</td><td><span class="chip">Hộp quà</span><span class="chip">Sự kiện xoay vòng 21 ngày</span><span class="chip">Rương 3</span></td></tr><tr><td><span class="mono">60101</span></td><td class=num>581</td><td>Fireland-1 wave 1</td><td><span class="chip">Endless abyss</span></td></tr><tr><td><span class="mono">120101</span></td><td class=num>—</td><td>Không tới được (vượt wave cuối 81025)</td><td><span class="chip off">Dark Side</span></td></tr><tr><td><span class="mono">120201</span></td><td class=num>—</td><td>Không tới được (vượt wave cuối 81025)</td><td><span class="chip off">Arcade</span></td></tr><tr><td><span class="mono">200101</span></td><td class=num>—</td><td>Không tới được (vượt wave cuối 81025)</td><td><span class="chip off">Công trình chưa phát hành</span></td></tr><tr><td><span class="mono">200201</span></td><td class=num>—</td><td>Không tới được (vượt wave cuối 81025)</td><td><span class="chip off">Nhiệm vụ 3 ngày</span></td></tr></tbody></table></div>
+</section>
+
+<section id="tai-nguyen">
+  <header><span class="eyebrow">06</span><h2>Hệ thống tài nguyên</h2>
+  <p class="muted">Giá quy đổi theo shop trong game: khoảng 130 gem mỗi USD, 100 gold = 1 gem.</p></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Tài nguyên</th><th>Dùng để</th><th>Nguồn chính</th><th>Quy đổi</th></tr></thead>
+    <tbody>
+      <tr><td>Gem</td><td>Gacha, mua gold, mua thêm lượt, refresh shop, Growth Fund</td><td>Chuỗi thành tựu FuZeng (474k), Level Rewards (40k), Island (~1.045/ngày), VIP hằng ngày, nạp</td><td>1</td></tr>
+      <tr><td>Gold</td><td>Chỉ để mua turret cho bàn merge</td><td>Campaign, Portal of Impasse, FuZeng, Island Cottage, Plunder, piggy bank</td><td>0,01</td></tr>
+      <tr><td>Shard từng unit</td><td>Mở và lên cấp 39 unit (25.560 shard mỗi unit tới cấp 150)</td><td>Random shard từ Level Rewards, Island, Asgard Portal, Plunder, gói nạp</td><td>32 (hero 64)</td></tr>
+      <tr><td>Rune (tower, dragon, spell, hero)</td><td>Talent (cây cường hóa) của từng unit</td><td>Island Barracks, Dragon Lair, Spell House, Asgard Portal, Salvage, Alchemy tier-up 4:1</td><td>~16</td></tr>
+      <tr><td>Asgard Portal Key</td><td>Mở Asgard Portal (rương shard, rune, vật liệu)</td><td>FuZeng hero (4.014), Portal tầng (752), Level Rewards, VIP</td><td>300</td></tr>
+      <tr><td>Adamantium / Urutium</td><td>Gacha gear thường và cao cấp</td><td>Nhiệm vụ ngày, sự kiện, VIP; Urutium chủ yếu từ Furnace (gói trọn đời)</td><td>400 / không bán bằng gem</td></tr>
+      <tr><td>Ruby Crystal</td><td>Rương constellation (100 mỗi lần)</td><td>Arena mùa, World Boss, VIP, nạp</td><td>~10</td></tr>
+      <tr><td>Dragon Tooth</td><td>Shop Arena</td><td>Arena</td><td>~3,3</td></tr>
+      <tr><td>Anchor</td><td>Nâng cấp tàu Salvage</td><td>FuZeng (125k), Level Rewards (37k), VIP</td><td>~14,5</td></tr>
+      <tr><td>Log, Plank, Stone, Brick</td><td>Xây và nâng công trình Island, Palace</td><td>Portal (thưởng tầng hằng ngày), Salvage, Asgard Portal, FuZeng</td><td>ước tính</td></tr>
+      <tr><td>Augite</td><td>Nguyên liệu Alchemy Workshop</td><td>Chỉ từ Salvage (23–27% mỗi lần mở kho báu)</td><td>ước tính</td></tr>
+      <tr><td>Base Scroll / Merger Slot Shard</td><td>Mở ô bàn merge (600) / ô chờ (1.370)</td><td>Level Rewards, Asgard Portal, FuZeng, shop 100 / 50 gem</td><td>100 / 50</td></tr>
+      <tr><td>Yggdrasil Root, Fruit</td><td>Skill và độ thân thiết Behemoth</td><td>Đảo Yggdrasil, tàu tiếp tế, FuZeng</td><td>ước tính</td></tr>
+      <tr><td>Ad Ticket</td><td>Nhận thưởng ads mà không phải xem</td><td>Salvage, shop, UFO shop</td><td>—</td></tr>
+      <tr><td>VIP EXP</td><td>Cấp VIP (0–19)</td><td>Chỉ từ nạp tiền, khoảng 6 EXP mỗi USD</td><td>—</td></tr>
+    </tbody></table></div>
+  <figure class="chart">
+    <div class="title">Dòng chảy tài nguyên chính</div>
+<pre class="mermaid">
+flowchart LR
+  C["Campaign 1.330 wave"] --> G["Gold"]
+  C --> LR["Level Rewards"]
+  LR --> SH["Random shard"]
+  LR --> GEM["Gem"]
+  G --> BUY["Mua turret ngẫu nhiên"]
+  BUY --> MER["Ghép sao 1★ → 15★"]
+  MER --> PW["BattlePower"]
+  SH --> LV["Cấp unit 1 → 150"]
+  LV --> PW
+  POR["Portal of Impasse"] --> ISL["Công trình Island"]
+  POR --> WOOD["Log / Stone"]
+  WOOD --> ISL
+  ISL --> GEM
+  ISL --> SH
+  ISL --> G
+  ISL --> RU["Rune"]
+  SAL["Salvage"] --> AUG["Augite"]
+  AUG --> ALC["Alchemy"]
+  ALC --> RU
+  RU --> TAL["Talent"]
+  TAL --> PW
+  GEM --> AP["Asgard Portal 300 gem"]
+  AP --> SH
+  AP --> RU
+  GEM --> FORGE["Gear forge"]
+  FORGE --> PW
+  ARN["Arena / World Boss"] --> RUBY["Ruby Crystal"]
+  RUBY --> CON["Constellation"]
+  CON --> PW
+  PW -->|"mở wave tiếp"| C
+</pre>
+    <figcaption>Rút gọn từ đồ thị 70 nút, 126 cạnh dựng từ các bảng config và manager Lua.</figcaption>
+  </figure>
+</section>
+
+<section id="gold">
+  <header><span class="eyebrow">07</span><h2>Kinh tế gold: thu và chi</h2></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Nguồn gold</th><th class="num">Lượng</th><th>Ghi chú</th></tr></thead>
+    <tbody>
+      <tr><td>Campaign: gold giết quái + thưởng thắng wave</td><td class="num">8,0 triệu</td><td>4,4 triệu từ giết quái + 3,6 triệu thưởng thắng; một lần cho cả game</td></tr>
+      <tr><td>Campaign khi xem ads ở mọi wave</td><td class="num">27,9 triệu</td><td>Ads nhận thêm 2 lần thưởng wave (4 lần ở wave boss)</td></tr>
+      <tr><td>Level Rewards free / trả phí</td><td class="num">2,0 / 0,25 triệu</td><td>Thưởng theo từng wave</td></tr>
+      <tr><td>Portal of Impasse, lần đầu qua tầng</td><td class="num">6,3 triệu</td><td>567 tầng</td></tr>
+      <tr><td>Chuỗi thành tựu FuZeng</td><td class="num">6,6 triệu</td><td>18 bảng, 11.488 dòng</td></tr>
+      <tr><td>Piggy bank (4 bậc)</td><td class="num">12,05 triệu</td><td>Trả tổng $36,96, mỗi bậc mua được một lần</td></tr>
+      <tr><td>Island Cottage tối đa</td><td class="num">~220k/ngày</td><td>Idle, giới hạn bởi sức chứa Palace (~28 giờ)</td></tr>
+      <tr><td>Gold Plunder</td><td class="num">≤ 69,6k/ngày</td><td>3 lượt miễn phí, tối đa 23.200 mỗi lượt</td></tr>
+      <tr><td>Đổi từ gem</td><td class="num">100 / gem</td><td>Shop</td></tr>
+    </tbody></table></div>
+  <figure class="chart" id="fig-gold">
+    <div class="title">Gold tích lũy từ campaign so với giá turret sao cao (thang log)</div>
+    <div class="box"><canvas id="c-gold" role="img" aria-label="Biểu đồ đường: gold tích lũy theo khu, có và không có ads, so với hai mốc chi phí"></canvas></div>
+    <figcaption>Nguồn: EnemyGroup, Region, Enemy, Common (RecruitCost, RecruitCostAddition, RecruitCostMax). Chưa cộng các nguồn ngoài campaign trong bảng trên.</figcaption>
+  </figure>
+  <details><summary>Giá ghép sao turret</summary><div class="tbl "><table><thead><tr><th>Sao</th><th class=num>Turret 1★ cần</th><th class=num>Gold (giá trần 2.000)</th><th class=num>Cấp cộng thêm</th><th class=num>Combat cộng thêm</th></tr></thead><tbody><tr><td>1★</td><td class=num>1</td><td class=num>2.000</td><td class=num>+0</td><td class=num>+0%</td></tr><tr><td>2★</td><td class=num>2</td><td class=num>4.000</td><td class=num>+1</td><td class=num>+10%</td></tr><tr><td>3★</td><td class=num>4</td><td class=num>8.000</td><td class=num>+2</td><td class=num>+30%</td></tr><tr><td>4★</td><td class=num>8</td><td class=num>16.000</td><td class=num>+4</td><td class=num>+50%</td></tr><tr><td>5★</td><td class=num>16</td><td class=num>32.000</td><td class=num>+6</td><td class=num>+70%</td></tr><tr><td>6★</td><td class=num>32</td><td class=num>64.000</td><td class=num>+8</td><td class=num>+90%</td></tr><tr><td>7★</td><td class=num>64</td><td class=num>128.000</td><td class=num>+11</td><td class=num>+110%</td></tr><tr><td>8★</td><td class=num>128</td><td class=num>256.000</td><td class=num>+14</td><td class=num>+140%</td></tr><tr><td>9★</td><td class=num>256</td><td class=num>512.000</td><td class=num>+18</td><td class=num>+170%</td></tr><tr><td>10★</td><td class=num>512</td><td class=num>1.024.000</td><td class=num>+22</td><td class=num>+200%</td></tr><tr><td>11★</td><td class=num>1.024</td><td class=num>2.048.000</td><td class=num>+27</td><td class=num>+240%</td></tr><tr><td>12★</td><td class=num>2.048</td><td class=num>4.096.000</td><td class=num>+32</td><td class=num>+280%</td></tr><tr><td>13★</td><td class=num>4.096</td><td class=num>8.192.000</td><td class=num>+38</td><td class=num>+320%</td></tr><tr><td>14★</td><td class=num>8.192</td><td class=num>16.384.000</td><td class=num>+44</td><td class=num>+360%</td></tr><tr><td>15★</td><td class=num>16.384</td><td class=num>32.768.000</td><td class=num>+50</td><td class=num>+420%</td></tr></tbody></table></div></details>
+  <ul class="points">
+    <li><b>Giá mua turret 1★</b> tăng 20 gold mỗi lần mua và chạm trần 2.000 sau lần mua thứ 95. Bộ đếm này không bao giờ reset.</li>
+    <li><b>Nghịch lý ở late game:</b> thu nhập tăng tuyến tính, còn chi phí mỗi sao tăng gấp đôi.
+      <ul>
+        <li>Gold cuối campaign (không ads) chỉ đủ khoảng 4.050 turret 1★, tức trung bình khoảng 7★ cho 60 ô.</li>
+        <li>Lên 15★ cho một ô cần 16.384 turret 1★. Ở mức F2P khoảng 300k gold mỗi ngày, đó là 110 ngày cho một turret.</li>
+      </ul>
+    </li>
+    <li><b>Hệ quả:</b> gold không bao giờ mất giá. Mọi nguồn gold (piggy bank, đổi gem, Island) đều luôn có người mua.</li>
+  </ul>
+</section>
+
+<section id="shard">
+  <header><span class="eyebrow">08</span><h2>Shard, rune và các trục nâng cấp khác</h2></header>
+  <div class="grid2">
+    <figure class="chart" id="fig-shard">
+      <div class="title">Shard tích lũy để lên cấp một unit</div>
+      <div class="box"><canvas id="c-shard" role="img" aria-label="Biểu đồ đường: số shard tích lũy cần cho cấp 0 tới 150"></canvas></div>
+      <figcaption>Nguồn: TowerInCardUpgrade (giống hệt HeroUpgrade, TowerMainCardUpgrade, SkillMainCardUpgrade).</figcaption>
+    </figure>
+    <div class="note">
+      <b>Đuôi dốc:</b> cấp 100 cần 5.060 shard, cấp 150 cần 25.560. Khoảng 80% chi phí nằm ở 50 cấp cuối.
+      <span>39 unit nhân 25.560 là gần 1 triệu shard. Cả campaign chỉ cho 37.776 random shard từ Level Rewards, tức chưa đủ để max 2 unit.</span>
+      <span>Random shard luôn ưu tiên unit đang ít shard nhất (trọng số 100/50/20/10 theo khoảng cách so với trung bình). Đây là cơ chế bắt kịp để giảm cảm giác ra trùng.</span>
+      <span>Hero shard khan nhất: không có nguồn idle, chủ yếu từ Portal (11.382 tổng) và gói hero bán hằng ngày.</span>
+    </div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Trục nâng cấp</th><th>Chi phí tới tối đa</th><th>Mở ở</th></tr></thead>
+    <tbody>
+      <tr><td>Talent (cây cường hóa)</td><td>Tower ~583k rune, Hero ~784k, Spell ~173k, Dragon ~137k (đã gồm rune nâng cao, ước tính)</td><td>Theo cấp unit</td></tr>
+      <tr><td>Gear (149 món, 3 ô mỗi unit)</td><td>Mỗi món: 1.800 thẻ + tới 6.200 Ascension Stone + 1.960 Enhancement Stone</td><td>Aqualand-3</td></tr>
+      <tr><td>Constellation (88)</td><td>31 mảnh + 310 stardust mỗi cái lên 5★; xác suất ra cái mới giảm dần, sàn 5%</td><td>Khi có cái đầu tiên</td></tr>
+      <tr><td>Island (55 công trình + Palace)</td><td>159.720 log, 17.160 plank; Palace 311.500 Stone, 31.300 Brick</td><td>Windland-2</td></tr>
+      <tr><td>Salvage (12 tàu)</td><td>559.260 Anchor</td><td>Windland-3</td></tr>
+      <tr><td>Alchemy</td><td>247.500 EXP tới cấp 100</td><td>Windland-4</td></tr>
+      <tr><td>Behemoth (2 con)</td><td>333.402 Yggdrasil Root + 53.300 EXP Fruit</td><td>Thunderland-1</td></tr>
+      <tr><td>Ô bàn merge / ô chờ</td><td>600 Base Scroll / 1.370 Merger Slot Shard (~68.500 gem)</td><td>Từ đầu</td></tr>
+    </tbody></table></div>
+</section>
+
+<section id="gem">
+  <header><span class="eyebrow">09</span><h2>Gem và gacha</h2></header>
+  <ul class="points">
+    <li><b>Nguồn gem miễn phí</b> lớn nhất là 18 chuỗi thành tựu FuZeng, tổng 474k gem, thưởng cho việc chơi đủ mọi hệ thống.
+      <ul>
+        <li>Tiếp theo là Level Rewards (40.100), Island tối đa (~1.045 gem mỗi ngày) và quà VIP hằng ngày.</li>
+        <li>Quà VIP cộng dồn mọi cấp thấp hơn: VIP 1 khoảng 770 gem quy đổi mỗi ngày, VIP 19 khoảng 20.900.</li>
+      </ul>
+    </li>
+    <li><b>Gói gem:</b> 120–136 gem mỗi USD. Lần mua đầu của mỗi mức được nhân đôi, nhưng cờ này reset mỗi tháng, nên thực chất là khuyến mãi nhân đôi hằng tháng.</li>
+    <li><b>Asgard Portal</b> (300 gem mỗi lượt):
+      <ul>
+        <li>Nội dung: khoảng 40% rune, 25% random shard, 20% vật liệu Island, 7,9% Base Shard.</li>
+        <li>Giá trị kỳ vọng khoảng 377–385 gem theo giá shop, tức lời hơn giá mở.</li>
+      </ul>
+    </li>
+    <li><b>Gear forge:</b>
+      <ul>
+        <li>Thường (400 gem hoặc 1 Adamantium): 31% ra nguyên món; 10 lượt chắc chắn một món tím.</li>
+        <li>Cao cấp (1 Urutium): 10 lượt chắc chắn một món cam; Urutium chủ yếu đến từ gói Furnace.</li>
+      </ul>
+    </li>
+    <li><b>Odin's Treasure</b> chỉ chứa đồ đỏ (phẩm chất 5). Key lấy từ gói nạp và sự kiện xoay vòng.</li>
+    <li><b>Chỗ tiêu gem khác:</b>
+      <ul>
+        <li>Mua gold (100 gold mỗi gem).</li>
+        <li>Mua thêm lượt Plunder, Boss, Arena với giá tăng dần.</li>
+        <li>Refresh shop (100 lên 1.000 gem).</li>
+        <li>Điểm pass (5 gem mỗi điểm), Growth Fund (5.000 gem, trả lại 63.000 gem qua 41 mốc), đổi tên (1.000).</li>
+      </ul>
+    </li>
+  </ul>
+</section>
+
+<section id="late">
+  <header><span class="eyebrow">10</span><h2>Late game</h2>
+  <p class="muted">Sau wave 81025, campaign kết thúc hẳn. Hành tinh 9–12 chỉ có tên tạm chưa dịch.</p></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Chế độ</th><th>Mở ở</th><th>Giới hạn lượt</th><th>Cấu trúc</th><th>Thưởng chính</th></tr></thead>
+    <tbody>
+      <tr><td>Plunder (Gold, Shard, Rune)</td><td>Windland-2</td><td>3 / 1 / 2 lượt miễn phí mỗi ngày; VIP mua thêm; sweep từ VIP 2</td><td>10 tier mỗi loại, thưởng xoay vòng 4 ngày</td><td>Gold (≤ 23.200 mỗi lượt), shard, rune</td></tr>
+      <tr><td>Portal of Impasse</td><td>Windland-3</td><td>Không giới hạn; thưởng tầng 2 lần mỗi ngày</td><td>567 tầng; từ tầng 99 khóa theo campaign (~10 tầng mỗi khu), khó gấp 1,6–6 lần wave mở nó</td><td>6,3 triệu gold, 11.382 hero shard, 752 key, 53 công trình Island</td></tr>
+      <tr><td>World Boss War</td><td>Windland-3</td><td>3 lượt mỗi ngày</td><td>Kraken / Sandworm luân phiên, máu chung toàn server, tự điều chỉnh</td><td>Ruby Crystal, key theo hạng</td></tr>
+      <tr><td>Arena</td><td>Windland-4</td><td>~7 trận miễn phí mỗi ngày</td><td>Bất đồng bộ, ATK còn 17%; mùa 28 ngày, 31 hạng, Elo K=60</td><td>Dragon Tooth, Ruby Crystal</td></tr>
+      <tr><td>League và Island War</td><td>Aqualand-1</td><td>10 Rum mỗi trận, Rum hồi 1 mỗi 12 phút</td><td>Guild 70 cấp (4,225 triệu EXP); Island War hằng tuần, 3 league mỗi phòng</td><td>Training EXP, Contribution</td></tr>
+      <tr><td>Yggdrasil</td><td>Thunderland-1</td><td>720 phút thu thập mỗi ngày</td><td>Chiếm chỗ trên đảo, bất đồng bộ</td><td>Nguyên liệu Behemoth</td></tr>
+      <tr><td>Endless abyss</td><td>Fireland-1</td><td>3 stamina, hồi 1 mỗi 6 giờ</td><td>500 wave × 15 tier; độ khó ×0,6–×100 nhưng thưởng chỉ ×1–×6,6</td><td>Alchemy Speedup, Random Gemstone; PvE duy nhất không có trần</td></tr>
+      <tr><td>Colonize</td><td>Windland-2</td><td>Một lần</td><td>252 wave, dễ hơn campaign (~0,63 lần)</td><td>Gold bắt kịp</td></tr>
+      <tr><td class="muted">Arcade, Dark Side</td><td class="muted">Stage 120201 / 120101</td><td class="muted">—</td><td class="muted">Không mở được trong bản này</td><td class="muted">—</td></tr>
+    </tbody></table></div>
+  <div class="grid2">
+    <div class="note"><b>Mất bao lâu để chạm trần (F2P, ước tính)</b>
+      <ul>
+        <li>1 turret 15★: khoảng 110 ngày với 300k gold mỗi ngày.</li>
+        <li>Cả 60 ô 15★: khoảng 18 năm.</li>
+        <li>21 turret lên cấp 150: 536.760 shard, khoảng 2 năm với ~730 shard mỗi ngày.</li>
+        <li>9 hero lên cấp 150: 230.040 hero shard, gần như chỉ có từ nạp.</li>
+      </ul>
+    </div>
+    <div class="note"><b>Một ngày chơi late game (ước tính khoảng 60 phút, chia 3–4 lần mở game)</b>
+      <ul>
+        <li>Endless 3–4 lượt (~20 phút), nhiều thời gian nhất.</li>
+        <li>Plunder 6 lượt (~6 phút), Arena ~7 trận (~7 phút), World Boss 3 lượt (~5 phút).</li>
+        <li>League và Island War (~10 phút vào ngày có war).</li>
+        <li>Thu Island, Salvage, Alchemy, Yggdrasil (~6 phút).</li>
+        <li>Nhiệm vụ ngày, ads, vòng quay sự kiện (~5 phút).</li>
+      </ul>
+    </div>
+  </div>
+  <p>Mọi chế độ phụ bị chặn bằng số lượt hoặc stamina chứ không bằng độ khó. Vì vậy thời gian chơi biến thành số ngày. Gem và VIP mua thêm lượt cho tất cả các chế độ cùng lúc. Island là vòng lặp kép: Portal cho công trình, công trình đẻ gem và shard mỗi ngày, nên người chơi lâu năm được thưởng ngày càng nhiều.</p>
+</section>
+
+<section id="nap">
+  <header><span class="eyebrow">11</span><h2>Monetization</h2></header>
+  <div class="grid2">
+    <figure class="chart" id="fig-price">
+      <div class="title">Số gói nạp theo mức giá</div>
+      <div class="box"><canvas id="c-price" role="img" aria-label="Biểu đồ cột: số gói nạp ở mỗi mức giá"></canvas></div>
+      <figcaption>Nguồn: bảng Shop, 282 dòng có Product. Price tính bằng cent USD.</figcaption>
+    </figure>
+    <figure class="chart" id="fig-vip">
+      <div class="title">Tiền nạp tích lũy để lên mỗi cấp VIP (thang log)</div>
+      <div class="box"><canvas id="c-vip" role="img" aria-label="Biểu đồ đường: USD tích lũy cần cho VIP 0 tới 19"></canvas></div>
+      <figcaption>Nguồn: bảng Vip (Exp) và Shop.VipExp, khoảng 6 VIP EXP mỗi USD. Gói đẩy VIP cho gấp đôi EXP nên có thể rẻ hơn tới một nửa.</figcaption>
+    </figure>
+  </div>
+  <details><summary>Bảng số liệu của hai biểu đồ</summary><div class="grid2"><div class="tbl "><table><thead><tr><th class=num>Giá</th><th class=num>Số gói</th></tr></thead><tbody><tr><td class=num>$0,99</td><td class=num>23</td></tr><tr><td class=num>$1,99</td><td class=num>30</td></tr><tr><td class=num>$2,99</td><td class=num>1</td></tr><tr><td class=num>$4,99</td><td class=num>52</td></tr><tr><td class=num>$6,99</td><td class=num>1</td></tr><tr><td class=num>$9,99</td><td class=num>71</td></tr><tr><td class=num>$14,99</td><td class=num>9</td></tr><tr><td class=num>$19,99</td><td class=num>48</td></tr><tr><td class=num>$39,99</td><td class=num>1</td></tr><tr><td class=num>$49,00</td><td class=num>1</td></tr><tr><td class=num>$49,99</td><td class=num>22</td></tr><tr><td class=num>$69,99</td><td class=num>1</td></tr><tr><td class=num>$79,99</td><td class=num>3</td></tr><tr><td class=num>$99,99</td><td class=num>19</td></tr></tbody></table></div><div class="tbl "><table><thead><tr><th>VIP</th><th class=num>VIP EXP tích lũy</th><th class=num>Tiền nạp ước tính (USD)</th></tr></thead><tbody><tr><td>1</td><td class=num>6</td><td class=num>$1</td></tr><tr><td>2</td><td class=num>36</td><td class=num>$6</td></tr><tr><td>4</td><td class=num>300</td><td class=num>$50</td></tr><tr><td>5</td><td class=num>600</td><td class=num>$100</td></tr><tr><td>7</td><td class=num>2.000</td><td class=num>$333</td></tr><tr><td>10</td><td class=num>8.000</td><td class=num>$1.333</td></tr><tr><td>12</td><td class=num>18.000</td><td class=num>$3.000</td></tr><tr><td>15</td><td class=num>40.000</td><td class=num>$6.667</td></tr><tr><td>17</td><td class=num>75.000</td><td class=num>$12.500</td></tr><tr><td>19</td><td class=num>130.000</td><td class=num>$21.667</td></tr></tbody></table></div></div></details>
+  <ul class="points">
+    <li><b>VIP EXP chỉ đến từ nạp tiền.</b> Mỗi gói cho số EXP bằng giá CNY tương ứng ($0,99 cho 6 EXP).
+      <ul>
+        <li>VIP mở thêm lượt mua, tăng tốc, slot shop, sức mạnh Alchemy, và quà hằng ngày cộng dồn.</li>
+        <li>VIP còn nâng trần mua chính các gói giảm giá: gói tuần và tháng từ 1 lên 5 lần, gói chọn 1 trong 3 từ 3 lên 51 lần mỗi ngày.</li>
+      </ul>
+    </li>
+    <li><b>Seasonal Golden Pass</b> ($9,99 mỗi tháng):
+      <ul>
+        <li>40 cấp, 2.000 điểm; mua điểm bằng gem giá 5 gem mỗi điểm.</li>
+        <li>Nhánh trả phí trị giá khoảng 23.500 gem quy đổi, gấp khoảng 19 lần tỷ giá gói gem. Phần thưởng cuối là turret cam 6★.</li>
+      </ul>
+    </li>
+    <li><b>Level Rewards pass</b> ($19,99, mua một lần): nhánh trả phí chỉ bằng 12–20% giá trị nhánh miễn phí, và gem trả phí dồn về cuối (2.000 mỗi hành tinh ở Sakuraland và Iceland).</li>
+    <li><b>Growth Fund:</b> bản thường trả 5.000 gem, nhận lại 63.000 gem qua 41 mốc. Adv. Growth Fund ($9,99) và Hero Growth Fund ($19,99, 100 mốc theo tổng power hero) bán riêng.</li>
+    <li><b>Thẻ trọn đời:</b> $4,99 cho 10 Asgard Portal Key mỗi ngày mãi mãi; $6,99 cho 300 Ruby Crystal mỗi ngày.</li>
+    <li><b>Furnace:</b> 5 cấp, $4,99 tới $99,99, nhỏ giọt từ 1 lên 8 Urutium mỗi ngày.</li>
+  </ul>
+  <figure class="chart" id="fig-lp">
+    <div class="title">Level Rewards: gem nhánh miễn phí và nhánh trả phí theo hành tinh</div>
+    <div class="box"><canvas id="c-lp" role="img" aria-label="Biểu đồ cột nhóm: gem nhánh miễn phí và trả phí ở 8 hành tinh"></canvas></div>
+    <figcaption>Nguồn: bảng LevelBonus (FreeRewards, GoldRewards). LevelBonus còn 575 dòng cho hành tinh 9–10 chưa tới được.</figcaption>
+  </figure>
+  <details><summary>Bảng đầy đủ Level Rewards theo hành tinh</summary><div class="tbl "><table><thead><tr><th>Hành tinh</th><th class=num>Gem (free)</th><th class=num>Gem (trả phí)</th><th class=num>Gold free (nghìn)</th><th class=num>Gold trả phí (nghìn)</th><th class=num>Shard free</th><th class=num>Shard trả phí</th></tr></thead><tbody><tr><td>Windland</td><td class=num>1.490</td><td class=num>70</td><td class=num>18</td><td class=num>5</td><td class=num>201</td><td class=num>96</td></tr><tr><td>Aqualand</td><td class=num>2.870</td><td class=num>40</td><td class=num>32</td><td class=num>1</td><td class=num>407</td><td class=num>181</td></tr><tr><td>Thunderland</td><td class=num>4.460</td><td class=num>100</td><td class=num>120</td><td class=num>2</td><td class=num>1.351</td><td class=num>567</td></tr><tr><td>Woodland</td><td class=num>5.480</td><td class=num>150</td><td class=num>295</td><td class=num>3</td><td class=num>3.922</td><td class=num>1.251</td></tr><tr><td>Mistland</td><td class=num>6.500</td><td class=num>100</td><td class=num>602</td><td class=num>8</td><td class=num>7.818</td><td class=num>2.414</td></tr><tr><td>Fireland</td><td class=num>7.300</td><td class=num>500</td><td class=num>489</td><td class=num>26</td><td class=num>17.918</td><td class=num>2.151</td></tr><tr><td>Sakuraland</td><td class=num>6.000</td><td class=num>2.000</td><td class=num>220</td><td class=num>100</td><td class=num>2.880</td><td class=num>400</td></tr><tr><td>Iceland</td><td class=num>6.000</td><td class=num>2.000</td><td class=num>220</td><td class=num>100</td><td class=num>2.880</td><td class=num>400</td></tr></tbody></table></div></details>
+  <details><summary>28 loại gói nạp</summary><div class="tbl "><table><thead><tr><th>Loại gói</th><th class=num>Số SKU</th><th>Giá</th><th class=num>Tổng giá niêm yết</th><th>Là gì</th></tr></thead><tbody><tr><td><span class="mono">PacLoop</span></td><td class=num>83</td><td>$0,99–$99,99</td><td class=num>$1.501</td><td>Gói bật lên khi nút nâng cấp bị xám vì thiếu tài nguyên, xếp thành chuỗi theo mốc; kèm gói đẩy VIP</td></tr><tr><td><span class="mono">TimePac</span></td><td class=num>45</td><td>$0,99–$99,99</td><td class=num>$805</td><td>Gói giới hạn 24 giờ, kích hoạt khi tới stage, mở turret hoặc hero, đạt VIP EXP</td></tr><tr><td><span class="mono">EventPac</span></td><td class=num>36</td><td>$0,99–$49,99</td><td class=num>$581</td><td>Gói trong sự kiện: Remove Ads, Daily Offers theo dải stage, gói hero hằng tuần, gói lễ</td></tr><tr><td><span class="mono">MiniRotationEventPac</span></td><td class=num>24</td><td>$0,99–$99,99</td><td class=num>$744</td><td>Gói của vòng quay may mắn (1 miễn phí, 1 bằng gem, 6 mức $0,99–99,99)</td></tr><tr><td><span class="mono">OptionalPac</span></td><td class=num>12</td><td>$9,99–$49,99</td><td class=num>$300</td><td>Chọn 1 trong 3 (Gear Choice Market); trần mua mỗi ngày tăng theo VIP từ 3 lên 51</td></tr><tr><td><span class="mono">Skin</span></td><td class=num>12</td><td>$9,99–$9,99</td><td class=num>$120</td><td>Skin, $9,99 mỗi bộ</td></tr><tr><td><span class="mono">AnniversaryEventPac</span></td><td class=num>8</td><td>$0,99–$99,99</td><td class=num>$186</td><td>Gói sự kiện kỷ niệm</td></tr><tr><td><span class="mono">Gem</span></td><td class=num>6</td><td>$0,99–$99,99</td><td class=num>$186</td><td>Nạp gem; lần mua đầu mỗi mức nhân đôi, cờ này reset mỗi tháng</td></tr><tr><td><span class="mono">TowerInPac</span></td><td class=num>6</td><td>$1,99–$69,99</td><td class=num>$147</td><td>Tặng 3 turret bạn dùng nhiều nhất ở mức sao cao nhất hiện có (6★ đến 11★)</td></tr><tr><td><span class="mono">TimeRiver</span></td><td class=num>5</td><td>$4,99–$99,99</td><td class=num>$184</td><td>Furnace: nâng cấp trọn đời, nhỏ giọt Urutium (khóa gacha cao cấp) mỗi ngày</td></tr><tr><td><span class="mono">DailyPac</span></td><td class=num>5</td><td>$0,99–$1,99</td><td class=num>$6</td><td>Gói ngày (1 miễn phí + 5 gói $0,99–1,99)</td></tr><tr><td><span class="mono">WeekPac</span></td><td class=num>5</td><td>$4,99–$9,99</td><td class=num>$35</td><td>Gói tuần; số lần mua tăng theo VIP (1 lên 5)</td></tr><tr><td><span class="mono">SeasonPac</span></td><td class=num>5</td><td>$19,99–$49,99</td><td class=num>$190</td><td>Gói tháng; số lần mua tăng theo VIP (1 lên 5)</td></tr><tr><td><span class="mono">BaoXianXiang</span></td><td class=num>4</td><td>$1,99–$19,99</td><td class=num>$37</td><td>Piggy bank 4 bậc, mỗi bậc mua một lần</td></tr><tr><td><span class="mono">Activity1Pac</span></td><td class=num>4</td><td>$0,99–$99,99</td><td class=num>$126</td><td>Nạp xu sự kiện</td></tr><tr><td><span class="mono">Activity3Pac</span></td><td class=num>4</td><td>$0,99–$99,99</td><td class=num>$126</td><td>Nạp xu sự kiện (Cargo Van)</td></tr><tr><td><span class="mono">RedCrystal</span></td><td class=num>3</td><td>$4,99–$99,99</td><td class=num>$125</td><td>Nạp Ruby Crystal, lần đầu nhân đôi</td></tr><tr><td><span class="mono">AnniversaryEventPass</span></td><td class=num>3</td><td>$4,99–$14,99</td><td class=num>$30</td><td>Pass sự kiện kỷ niệm</td></tr><tr><td><span class="mono">Fund</span></td><td class=num>2</td><td>$9,99–$19,99</td><td class=num>$30</td><td>Adv. Growth Fund và Hero Growth Fund</td></tr><tr><td><span class="mono">TeQuanItem</span></td><td class=num>2</td><td>$4,99–$6,99</td><td class=num>$12</td><td>Thẻ trọn đời: nhận quà đăng nhập mỗi ngày mãi mãi</td></tr><tr><td><span class="mono">PassSeason</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Seasonal Golden Pass hằng tháng</td></tr><tr><td><span class="mono">PassLevel</span></td><td class=num>1</td><td>$19,99–$19,99</td><td class=num>$20</td><td>Level Rewards pass, mua một lần</td></tr><tr><td><span class="mono">MiniPassSeason</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Arcade Pass hằng tháng</td></tr><tr><td><span class="mono">Activity1Pass</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Pass sự kiện</td></tr><tr><td><span class="mono">Activity3Pass</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Pass sự kiện</td></tr><tr><td><span class="mono">FactoryWorkshop</span></td><td class=num>1</td><td>$4,99–$4,99</td><td class=num>$5</td><td>Mở thêm Alchemy Workshop</td></tr><tr><td><span class="mono">MonsterSkillPac</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Gói skill Behemoth (cũ)</td></tr><tr><td><span class="mono">ShouchongItem</span></td><td class=num>1</td><td>$9,99–$9,99</td><td class=num>$10</td><td>Gói nạp đầu, thưởng thêm vào ngày 1/2/4/7</td></tr></tbody></table></div></details>
+</section>
+
+<section id="goi-moc">
+  <header><span class="eyebrow">12</span><h2>Gói xuất hiện ở các mốc sau</h2>
+  <p class="muted">Không có gói nội dung nào tải về sau. Tất cả gói dưới đây đã có sẵn trong config 1.20.10 và được bật theo điều kiện.</p></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Mốc</th><th>Gói hoặc sự kiện mở ra</th><th>Giá</th></tr></thead>
+    <tbody>
+      <tr><td>Ngày 3 của tài khoản</td><td>Điểm danh 7 ngày (điểm danh bù 100 gem)</td><td>—</td></tr>
+      <tr><td>Ngày 4, rồi mỗi 11 ngày</td><td>Vòng sự kiện nạp 8 ngày: nạp tích lũy 15 mốc, thưởng theo số ngày có nạp, shop giảm giá bằng gem</td><td>$1 → ~$1.000</td></tr>
+      <tr><td>Windland-2 wave 8</td><td>Newbie Pack 24 giờ, lặp lại mỗi 72 giờ. Lần đóng thứ 9 hiện hộp "90% người chơi đã chọn gói này"</td><td>Gói 24 giờ</td></tr>
+      <tr><td>Windland-3 wave 3</td><td>Piggy bank Safe I; gold tích theo mỗi trận thắng, mất nếu để đầy 48 giờ</td><td>$1,99 → $19,99</td></tr>
+      <tr><td>Windland-3 wave 6</td><td>VIP, Seasonal Golden Pass, Level Rewards pass</td><td>$9,99 / $19,99</td></tr>
+      <tr><td>Windland-4 wave 1</td><td>Gói nạp đầu (bật lên 4 lần mỗi ngày, thưởng ngày 1/2/4/7), Growth Fund, thẻ trọn đời, skin</td><td>$9,99; $4,99 / $6,99</td></tr>
+      <tr><td>Khi mở turret mới</td><td>Tower Pack 24 giờ</td><td>$0,99 trở lên</td></tr>
+      <tr><td>Aqualand-1</td><td>Gói ngày, tuần, tháng; gói "Unlock in advance"; Daily Offers; gói lễ</td><td>$0,99 → $49,99</td></tr>
+      <tr><td>Aqualand-4</td><td>Hero Growth Fund</td><td>$19,99</td></tr>
+      <tr><td>Dragon, turret, spell, hero cấp 20 → 80</td><td>Upgrade gift pack, mỗi trục một chuỗi 7 bước</td><td>$1,99 → $9,99</td></tr>
+      <tr><td>Tổng sao talent (refit) 10 → 80</td><td>Strengthening gift pack cho Dragon, turret, spell, hero</td><td>$1,99 → $49,99</td></tr>
+      <tr><td>Turret sao cao nhất 6★ → 11★</td><td>Tower gift pack: 3 turret bạn dùng nhiều nhất ở mức sao đó</td><td>$1,99 → $69,99</td></tr>
+      <tr><td>Sao công trình Island, sao Palace</td><td>Construction gift pack</td><td>$1,99 → $9,99</td></tr>
+      <tr><td>Dragon cấp 20 → 56</td><td>Gói tàu Salvage, Blacksmith, Enchantment, Gemstone, Horn (League war)</td><td>$0,99 → $19,99</td></tr>
+      <tr><td>VIP EXP 480 → 98.800</td><td>14 gói đẩy VIP, cho gấp đôi VIP EXP vừa đủ lên cấp kế</td><td>$9,99 → $99,99</td></tr>
+      <tr><td>VIP 7 / 9 / 11</td><td>Festival pack</td><td>$79,99</td></tr>
+    </tbody></table></div>
+  <ul class="points">
+    <li><b>PacLoop:</b> 26 chuỗi, 112 bước, tổng giá niêm yết $1.753.
+      <ul>
+        <li>Mỗi gói chỉ hiện 30 phút. Bỏ qua thì 48–72 giờ sau mới hiện lại, mua rồi thì 24 giờ.</li>
+        <li>Bước cuối của chuỗi lặp lại chính nó mãi mãi.</li>
+      </ul>
+    </li>
+    <li><b>Gói "ngủ":</b> 31 trong 45 TimePac gắn stage 200201 hoặc 500101, vượt wave cuối. Chúng không bao giờ bật, trừ khi server mở.</li>
+  </ul>
+</section>
+
+<section id="ads">
+  <header><span class="eyebrow">13</span><h2>Quảng cáo</h2></header>
+  <ul class="points">
+    <li><b>Chỉ có video có thưởng</b> (ironSource). Quảng cáo xen kẽ bị tắt vì gắn stage 120206, vượt wave cuối.</li>
+    <li><b>Nút ads sau trận thắng campaign</b> cộng thêm 2 lần toàn bộ gold của wave (4 lần ở 325 wave boss), không giới hạn số lần mỗi ngày. Đây là nguồn gold lớn nhất cho người không nạp.</li>
+    <li><b>Các vị trí ads khác:</b>
+      <ul>
+        <li>11 ads mỗi ngày ở shop, rương mốc 3/6/9/12 ads, AD Tower (3 turret mỗi ngày).</li>
+        <li>Tăng tốc tàu, Alchemy và dragger, số lần tăng theo VIP.</li>
+        <li>UFO shop.</li>
+      </ul>
+    </li>
+    <li><b>Ad Ticket</b> thay cho một lần xem. Remove Ads làm mọi vị trí ads thành miễn phí, bán $9,99 và chỉ hiện khi người chơi còn từ 10 Ad Ticket trở xuống.</li>
+    <li><b>Upsell Remove Ads:</b> lần yêu cầu ads thứ 9, 21, 31 và 51 trong đời tài khoản mở thẳng gói Remove Ads thay cho video.</li>
+  </ul>
+</section>
+
+<section id="liveops">
+  <header><span class="eyebrow">14</span><h2>Lịch live-ops</h2>
+  <p class="muted">Trung bình khoảng 2,2 sự kiện giới hạn thời gian chạy song song. Lịch Lucky Wheel trong config kéo tới năm 2028.</p></header>
+  <div class="tbl"><table>
+    <thead><tr><th>Nhịp</th><th>Nội dung</th></tr></thead>
+    <tbody>
+      <tr><td>Hằng ngày</td><td>Nhiệm vụ ngày (rương 20–100 điểm), điểm danh 7 ngày, nhiệm vụ Lucky Wheel, gói hero 1 ngày, gói ngày</td></tr>
+      <tr><td>Hằng tuần</td><td>Thưởng tiêu gem (20 mốc tới 90.000 gem), gói tuần, gói hero xoay theo thứ</td></tr>
+      <tr><td>Mỗi 11 ngày (theo tài khoản)</td><td>Vòng nạp: nạp tích lũy, nạp liên tiếp, shop giảm giá (8 ngày)</td></tr>
+      <tr><td>Mỗi 14 ngày</td><td>Gear Choice Market (7 ngày), Smithy tăng tỷ lệ gear</td></tr>
+      <tr><td>Mỗi 15 ngày</td><td>Lucky Wheel 10 ngày, kèm Event Pass và shop 12 cấp</td></tr>
+      <tr><td>Mỗi 21 ngày</td><td>4 lễ hội 3 ngày nối tiếp: Asgard Portal, Constellation Chest, Forging, Odin's Treasure</td></tr>
+      <tr><td>Hai lần mỗi tháng</td><td>Super Alchemy (ngày 6–12 và 20–26)</td></tr>
+      <tr><td>Hằng tháng</td><td>Seasonal Pass, Arcade Pass, gói tháng</td></tr>
+      <tr><td>Dịp lễ</td><td>Sự kiện 24 ngày: nhiệm vụ ngày, pass, quay gemstone, gói skin</td></tr>
+    </tbody></table></div>
+  <p>Sự kiện chủ yếu tái sử dụng các hành động hằng ngày (boss, arena, plunder, ghép turret, alchemy) làm mục tiêu nhiệm vụ. Không phải làm thêm nội dung mới cho mỗi sự kiện.</p>
+</section>
+
+<section id="loi">
+  <header><span class="eyebrow">15</span><h2>Lỗi và điểm lạ tìm thấy trong code</h2></header>
+  <div class="bugs">
+    <div class="bug"><h3>Trần gold chống gian lận quá lỏng</h3><p>Ở 650 wave có tàu, phần gold của tàu không được chia theo tổng gold nhóm quái. Kết quả là trần cao gấp 100–1.000 lần gold thật: tổng trần 1,04 tỷ, trong khi gold giết quái thật chỉ 4,4 triệu. Client bị sửa có thể báo gold lớn mà server vẫn chấp nhận.</p></div>
+    <div class="bug"><h3>Endless không có trần gold</h3><p>Server cộng thẳng gold do client báo về sau mỗi lượt Endless.</p></div>
+    <div class="bug"><h3>Gói VIP cuối không bao giờ hiện</h3><p>Lỗi lệch một trong hàm kiểm tra gói đẩy VIP, nên gói ở mốc 98.800 VIP EXP bị bỏ qua.</p></div>
+    <div class="bug"><h3>Constellation tính power sai</h3><p>Hàm SkillPower dùng một loại artifact không tồn tại, nên constellation cho spell không cộng power. Hàm TowerPower ghi đè bonus constellation của từng turret thay vì cộng dồn.</p></div>
+    <div class="bug"><h3>Nội dung chờ sẵn nhưng không tới được</h3><p>Arcade, Dark Side, Task3Day, quảng cáo xen kẽ và 31 TimePac gắn stage vượt 81025. LevelBonus có 575 dòng cho hành tinh 9–10. Đây là phần chuẩn bị cho chương 9–12 chưa phát hành.</p></div>
+    <div class="bug"><h3>Yêu cầu power gần như placeholder</h3><p>Từ Fireland, UserCombat chỉ tăng 1 điểm mỗi wave (45.247 lên 46.746), trong khi HP quái còn tăng thêm 50 lần.</p></div>
+    <div class="bug"><h3>Giá lệch và dòng mồ côi</h3><p>Furnace cấp 4 có giá $49,00 trong khi mã sản phẩm ghi 4999. Event 109 trỏ tới các dòng shop 1041–1044 không tồn tại.</p></div>
+    <div class="bug"><h3>Hằng số không còn dùng</h3><p>BaoXianXiangMin, Max, Mul trong Common chỉ được dùng trong code piggy bank bản cũ đã bị comment. Hệ Rob, Planet War và thuế colonize cũng đã tắt.</p></div>
+  </div>
+</section>
+
+<section id="bai-hoc">
+  <header><span class="eyebrow">16</span><h2>Bài học cho game Norse tactic của bạn</h2></header>
+  <ul class="points">
+    <li><b>Một chỗ tiêu không đáy, có công thức rõ</b> (2^(sao−1)), giữ giá trị cho tài nguyên chính suốt vòng đời game. Bạn có thể áp dụng cho gacha nguyên liệu trong doc.</li>
+    <li><b>Độ khó nhân, thưởng cộng</b> biến mọi hệ phụ thành đòn bẩy power: dễ bán, nhưng dễ sinh power creep. Nên định trước mỗi hệ được phép đóng góp bao nhiêu phần trăm power. Ở game này hero chiếm khoảng 75%.</li>
+    <li><b>Gói bật lên khi nút nâng cấp bị xám</b> đánh đúng lúc người chơi muốn nhất. Nếu dùng, hãy giới hạn như họ làm: hiện 30 phút, nghỉ 48–72 giờ.</li>
+    <li><b>Random shard ưu tiên unit đang thiếu</b> giảm cảm giác ra trùng, rất hợp với gacha nguyên liệu thay cho gacha tướng.</li>
+    <li><b>Logic dùng chung client và server, cộng cổng power do server kiểm,</b> là nền tốt cho async PvP. Nhưng cần kiểm tra kỹ công thức trần để không lặp lại lỗi trần gold ở trên.</li>
+    <li><b>Khóa giải mã nằm trong client</b> thì không có gì là bí mật. Đừng dựa vào việc che config để giữ cân bằng kinh tế hay lịch sự kiện.</li>
+  </ul>
+</section>
+
+<footer>
+  <span>Nguồn: APK North Tower – Merge TD Defense 1.20.10 (Google Play), config 3e154df.</span>
+  <span>Ước tính cần lưu ý: giá trị quy đổi gem của rune và vật liệu; thời gian chơi; thu nhập F2P late game (Island tối đa, VIP 0); độ khó các chế độ phụ đo bằng tổng HP hiệu dụng, chưa tính ATK và kỹ năng quái.</span>
+  <span>Gold campaign giả định mỗi wave thắng một lần và nhặt hết gold.</span>
+</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const D = {"regions":[{"label":"Wind-1","planet":1,"hpIdx":6.4,"goldIdx":1.0,"cum":602,"cumAds":2124,"gpw":60,"hp":0.64269},{"label":"Wind-2","planet":1,"hpIdx":11.2,"goldIdx":2.7,"cum":2228,"cumAds":7688,"gpw":163,"hp":1.11758668},{"label":"Wind-3","planet":1,"hpIdx":30.9,"goldIdx":3.9,"cum":4585,"cumAds":15795,"gpw":236,"hp":3.095},{"label":"Wind-4","planet":1,"hpIdx":53.3,"goldIdx":5.6,"cum":7969,"cumAds":27265,"gpw":338,"hp":5.326},{"label":"Aqua-1","planet":2,"hpIdx":86.7,"goldIdx":7.0,"cum":12183,"cumAds":42543,"gpw":421,"hp":8.666},{"label":"Aqua-2","planet":2,"hpIdx":127.7,"goldIdx":8.0,"cum":16951,"cumAds":59915,"gpw":477,"hp":12.769},{"label":"Aqua-3","planet":2,"hpIdx":135.2,"goldIdx":9.5,"cum":22643,"cumAds":80853,"gpw":569,"hp":13.517},{"label":"Aqua-4","planet":2,"hpIdx":184.0,"goldIdx":12.4,"cum":30091,"cumAds":107949,"gpw":745,"hp":18.396},{"label":"Aqua-5","planet":2,"hpIdx":191.5,"goldIdx":12.6,"cum":37653,"cumAds":135477,"gpw":756,"hp":19.148},{"label":"Thun-1","planet":3,"hpIdx":253.4,"goldIdx":16.0,"cum":52024,"cumAds":186170,"gpw":958,"hp":25.345},{"label":"Thun-2","planet":3,"hpIdx":396.5,"goldIdx":16.4,"cum":66803,"cumAds":238643,"gpw":985,"hp":39.651},{"label":"Thun-3","planet":3,"hpIdx":507.3,"goldIdx":18.1,"cum":83144,"cumAds":296664,"gpw":1089,"hp":50.73},{"label":"Thun-4","planet":3,"hpIdx":590.9,"goldIdx":18.7,"cum":99998,"cumAds":356534,"gpw":1124,"hp":59.085},{"label":"Thun-5","planet":3,"hpIdx":665.3,"goldIdx":23.1,"cum":120800,"cumAds":430212,"gpw":1387,"hp":66.531},{"label":"Thun-6","planet":3,"hpIdx":789.4,"goldIdx":24.8,"cum":143127,"cumAds":509745,"gpw":1488,"hp":78.941},{"label":"Thun-7","planet":3,"hpIdx":890.0,"goldIdx":26.3,"cum":166793,"cumAds":593593,"gpw":1578,"hp":88.997},{"label":"Wood-1","planet":4,"hpIdx":726.3,"goldIdx":38.2,"cum":212673,"cumAds":754487,"gpw":2294,"hp":72.633},{"label":"Wood-2","planet":4,"hpIdx":908.1,"goldIdx":37.0,"cum":257047,"cumAds":909469,"gpw":2219,"hp":90.808},{"label":"Wood-3","planet":4,"hpIdx":1029.2,"goldIdx":44.3,"cum":310249,"cumAds":1095989,"gpw":2660,"hp":102.921},{"label":"Wood-4","planet":4,"hpIdx":1204.3,"goldIdx":43.5,"cum":362482,"cumAds":1278690,"gpw":2612,"hp":120.434},{"label":"Wood-5","planet":4,"hpIdx":1387.5,"goldIdx":48.8,"cum":420980,"cumAds":1483294,"gpw":2925,"hp":138.746},{"label":"Wood-6","planet":4,"hpIdx":1593.5,"goldIdx":47.6,"cum":478099,"cumAds":1683467,"gpw":2856,"hp":159.349},{"label":"Wood-7","planet":4,"hpIdx":1812.5,"goldIdx":50.8,"cum":539018,"cumAds":1897122,"gpw":3046,"hp":181.251},{"label":"Wood-8","planet":4,"hpIdx":2027.0,"goldIdx":51.6,"cum":600989,"cumAds":2113673,"gpw":3099,"hp":202.702},{"label":"Mist-1","planet":5,"hpIdx":1974.9,"goldIdx":68.2,"cum":703272,"cumAds":2469404,"gpw":4091,"hp":197.493},{"label":"Mist-2","planet":5,"hpIdx":2535.1,"goldIdx":61.8,"cum":795886,"cumAds":2792386,"gpw":3705,"hp":253.507},{"label":"Mist-3","planet":5,"hpIdx":2645.7,"goldIdx":64.4,"cum":892438,"cumAds":3128950,"gpw":3862,"hp":264.57},{"label":"Mist-4","planet":5,"hpIdx":2928.5,"goldIdx":69.7,"cum":997019,"cumAds":3493621,"gpw":4183,"hp":292.846},{"label":"Mist-5","planet":5,"hpIdx":3266.5,"goldIdx":74.9,"cum":1109386,"cumAds":3886178,"gpw":4495,"hp":326.653},{"label":"Mist-6","planet":5,"hpIdx":3711.7,"goldIdx":75.2,"cum":1222228,"cumAds":4278962,"gpw":4514,"hp":371.168},{"label":"Mist-7","planet":5,"hpIdx":3821.4,"goldIdx":76.5,"cum":1336948,"cumAds":4678880,"gpw":4589,"hp":382.142},{"label":"Mist-8","planet":5,"hpIdx":4491.0,"goldIdx":78.1,"cum":1454038,"cumAds":5087128,"gpw":4684,"hp":449.097},{"label":"Mist-9","planet":5,"hpIdx":4750.4,"goldIdx":88.4,"cum":1586625,"cumAds":5547687,"gpw":5303,"hp":475.044},{"label":"Fire-1","planet":6,"hpIdx":5335.0,"goldIdx":82.9,"cum":1711032,"cumAds":5982142,"gpw":4976,"hp":533.5},{"label":"Fire-2","planet":6,"hpIdx":6114.1,"goldIdx":86.9,"cum":1841369,"cumAds":6435691,"gpw":5213,"hp":611.412},{"label":"Fire-3","planet":6,"hpIdx":7885.2,"goldIdx":90.8,"cum":1977608,"cumAds":6910436,"gpw":5450,"hp":788.522},{"label":"Fire-4","planet":6,"hpIdx":9593.6,"goldIdx":93.9,"cum":2118475,"cumAds":7400201,"gpw":5635,"hp":959.36},{"label":"Fire-5","planet":6,"hpIdx":11661.1,"goldIdx":93.4,"cum":2258532,"cumAds":7887094,"gpw":5602,"hp":1166.115},{"label":"Fire-6","planet":6,"hpIdx":12993.0,"goldIdx":104.2,"cum":2414756,"cumAds":8431546,"gpw":6249,"hp":1299.303},{"label":"Fire-7","planet":6,"hpIdx":15646.4,"goldIdx":101.4,"cum":2566824,"cumAds":8961886,"gpw":6083,"hp":1564.641},{"label":"Fire-8","planet":6,"hpIdx":17729.8,"goldIdx":113.0,"cum":2736392,"cumAds":9552742,"gpw":6783,"hp":1772.98},{"label":"Fire-9","planet":6,"hpIdx":20616.5,"goldIdx":103.2,"cum":2891197,"cumAds":10090919,"gpw":6192,"hp":2061.655},{"label":"Fire-10","planet":6,"hpIdx":22055.3,"goldIdx":111.9,"cum":3059048,"cumAds":10675980,"gpw":6714,"hp":2205.533},{"label":"Saku-1","planet":7,"hpIdx":28917.5,"goldIdx":130.1,"cum":3254167,"cumAds":11355415,"gpw":7805,"hp":2891.752},{"label":"Saku-2","planet":7,"hpIdx":34009.2,"goldIdx":136.9,"cum":3459551,"cumAds":12069559,"gpw":8215,"hp":3400.921},{"label":"Saku-3","planet":7,"hpIdx":39410.3,"goldIdx":133.0,"cum":3659016,"cumAds":12764764,"gpw":7979,"hp":3941.034},{"label":"Saku-4","planet":7,"hpIdx":45124.4,"goldIdx":144.4,"cum":3875637,"cumAds":13519379,"gpw":8665,"hp":4512.439},{"label":"Saku-5","planet":7,"hpIdx":51158.1,"goldIdx":140.1,"cum":4085821,"cumAds":14251071,"gpw":8407,"hp":5115.812},{"label":"Saku-6","planet":7,"hpIdx":57512.2,"goldIdx":152.4,"cum":4314500,"cumAds":15047624,"gpw":9147,"hp":5751.222},{"label":"Saku-7","planet":7,"hpIdx":64190.2,"goldIdx":142.6,"cum":4528426,"cumAds":15791614,"gpw":8557,"hp":6419.016},{"label":"Saku-8","planet":7,"hpIdx":71195.4,"goldIdx":155.7,"cum":4761910,"cumAds":16602506,"gpw":9339,"hp":7119.537},{"label":"Saku-9","planet":7,"hpIdx":78535.8,"goldIdx":144.9,"cum":4979321,"cumAds":17360693,"gpw":8696,"hp":7853.579},{"label":"Saku-10","planet":7,"hpIdx":86206.2,"goldIdx":154.1,"cum":5210451,"cumAds":18164109,"gpw":9245,"hp":8620.62},{"label":"Ice-1","planet":8,"hpIdx":99575.7,"goldIdx":161.9,"cum":5453298,"cumAds":19009416,"gpw":9714,"hp":9957.571},{"label":"Ice-2","planet":8,"hpIdx":113603.5,"goldIdx":180.4,"cum":5723915,"cumAds":19950953,"gpw":10825,"hp":11360.352},{"label":"Ice-3","planet":8,"hpIdx":128301.3,"goldIdx":161.5,"cum":5966105,"cumAds":20793159,"gpw":9688,"hp":12830.132},{"label":"Ice-4","planet":8,"hpIdx":143668.9,"goldIdx":187.8,"cum":6247722,"cumAds":21774020,"gpw":11265,"hp":14366.892},{"label":"Ice-5","planet":8,"hpIdx":159726.8,"goldIdx":173.0,"cum":6507232,"cumAds":22677652,"gpw":10380,"hp":15972.679},{"label":"Ice-6","planet":8,"hpIdx":176467.1,"goldIdx":210.6,"cum":6823129,"cumAds":23778123,"gpw":12636,"hp":17646.713},{"label":"Ice-7","planet":8,"hpIdx":193903.9,"goldIdx":172.9,"cum":7082549,"cumAds":24680749,"gpw":10377,"hp":19390.389},{"label":"Ice-8","planet":8,"hpIdx":212034.6,"goldIdx":205.8,"cum":7391199,"cumAds":25755329,"gpw":12346,"hp":21203.461},{"label":"Ice-9","planet":8,"hpIdx":230864.5,"goldIdx":189.2,"cum":7674971,"cumAds":26743485,"gpw":11351,"hp":23086.447},{"label":"Ice-10","planet":8,"hpIdx":250409.1,"goldIdx":225.1,"cum":8012673,"cumAds":27918999,"gpw":13508,"hp":25040.915}],"shard":[[0,10],[5,25],[10,65],[15,130],[20,220],[25,335],[30,475],[35,640],[40,830],[45,1045],[50,1285],[55,1550],[60,1840],[65,2155],[70,2495],[75,2860],[80,3250],[85,3665],[90,4105],[95,4570],[100,5060],[105,5635],[110,6335],[115,7235],[120,8385],[125,9860],[130,11710],[135,14010],[140,16810],[145,20560],[150,25560]],"vip":{"labels":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],"usd":[0.0,1.0,6.0,16.67,50.0,100.0,200.0,333.33,500.0,750.0,1333.33,2166.67,3000.0,3833.33,5000.0,6666.67,9166.67,12500.0,16666.67,21666.67]},"lp":{"labels":["Windland","Aqualand","Thunderland","Woodland","Mistland","Fireland","Sakuraland","Iceland"],"free":[1490,2870,4460,5480,6500,7300,6000,6000],"paid":[70,40,100,150,100,500,2000,2000]},"price":{"labels":["$0,99","$1,99","$2,99","$4,99","$6,99","$9,99","$14,99","$19,99","$39,99","$49,00","$49,99","$69,99","$79,99","$99,99"],"n":[23,30,1,52,1,71,9,48,1,1,22,1,3,19]}};
+const charts = [];
+const fmt = new Intl.NumberFormat('vi-VN');
+const fmtC = new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 });
+function tok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function logTicks(v) { const l = Math.log10(v); return Math.abs(l - Math.round(l)) < 1e-9 ? fmtC.format(v) : ''; }
+function base(t) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: t.ink2, boxWidth: 14, boxHeight: 3, font: { family: t.font, size: 12 } } },
+      tooltip: { backgroundColor: t.surface, titleColor: t.ink, bodyColor: t.ink2, borderColor: t.line, borderWidth: 1, padding: 10,
+        titleFont: { family: t.font, weight: '600' }, bodyFont: { family: t.font } }
+    },
+    scales: {
+      x: { ticks: { color: t.muted, font: { family: t.font, size: 11 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 12 }, grid: { display: false }, border: { color: t.line } },
+      y: { ticks: { color: t.muted, font: { family: t.font, size: 11 } }, grid: { color: t.line }, border: { display: false } }
+    }
+  };
+}
+function build() {
+  charts.splice(0).forEach(c => c.destroy());
+  if (!window.Chart) return;
+  const t = { ink: tok('--ink'), ink2: tok('--ink-2'), muted: tok('--muted'), line: tok('--line'), surface: tok('--surface'),
+    s1: tok('--s1'), s2: tok('--s2'), s3: tok('--s3'), ref: tok('--ref'), font: 'Be Vietnam Pro, Segoe UI, sans-serif' };
+  const R = D.regions, labels = R.map(r => r.label);
+  const line = (label, data, color, extra) => Object.assign({ label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0 }, extra || {});
+
+  let o = base(t);
+  o.scales.y.type = 'logarithmic'; o.scales.y.ticks.callback = v => logTicks(v) ? '×' + logTicks(v) : '';
+  o.plugins.tooltip.callbacks = { label: c => ' ' + c.dataset.label + ': ×' + fmt.format(c.parsed.y) };
+  charts.push(new Chart(document.getElementById('c-growth'), { type: 'line', data: { labels, datasets: [
+    line('HP quái (wave cuối mỗi khu)', R.map(r => r.hpIdx), t.s1), line('Gold mỗi wave (trung bình khu)', R.map(r => r.goldIdx), t.s2)] }, options: o }));
+
+  o = base(t);
+  o.scales.y.type = 'logarithmic'; o.scales.y.ticks.callback = v => logTicks(v);
+  o.plugins.tooltip.callbacks = { label: c => ' ' + c.dataset.label + ': ' + fmt.format(Math.round(c.parsed.y)) };
+  charts.push(new Chart(document.getElementById('c-gold'), { type: 'line', data: { labels, datasets: [
+    line('Gold tích lũy, không xem ads', R.map(r => r.cum), t.s1),
+    line('Gold tích lũy, xem ads mọi wave', R.map(r => r.cumAds), t.s2),
+    line('Mốc: 1 turret 15★ (32,8 triệu)', R.map(() => 32768000), t.ref, { borderDash: [6, 4], borderWidth: 1.5 }),
+    line('Mốc: 60 ô turret 10★ (61,4 triệu)', R.map(() => 61440000), t.ref, { borderDash: [2, 3], borderWidth: 1.5 })] }, options: o }));
+
+  o = base(t);
+  o.plugins.legend.display = false;
+  o.scales.x.title = { display: true, text: 'Cấp unit', color: t.muted, font: { family: t.font, size: 11 } };
+  o.scales.y.ticks.callback = v => fmtC.format(v);
+  o.plugins.tooltip.callbacks = { title: c => 'Cấp ' + c[0].label, label: c => ' ' + fmt.format(c.parsed.y) + ' shard' };
+  charts.push(new Chart(document.getElementById('c-shard'), { type: 'line', data: { labels: D.shard.map(p => p[0]), datasets: [
+    line('Shard tích lũy', D.shard.map(p => p[1]), t.s1, { fill: true, backgroundColor: t.s1 + '22' })] }, options: o }));
+
+  o = base(t);
+  o.plugins.legend.display = false;
+  o.scales.y.ticks.callback = v => fmt.format(v);
+  o.plugins.tooltip.callbacks = { label: c => ' ' + c.parsed.y + ' gói' };
+  charts.push(new Chart(document.getElementById('c-price'), { type: 'bar', data: { labels: D.price.labels, datasets: [
+    { label: 'Số gói', data: D.price.n, backgroundColor: t.s1, borderRadius: 4, barPercentage: 0.8 }] }, options: o }));
+
+  o = base(t);
+  o.plugins.legend.display = false;
+  o.scales.x.title = { display: true, text: 'Cấp VIP', color: t.muted, font: { family: t.font, size: 11 } };
+  o.scales.y.type = 'logarithmic'; o.scales.y.ticks.callback = v => logTicks(v) ? '$' + logTicks(v) : '';
+  o.plugins.tooltip.callbacks = { title: c => 'VIP ' + c[0].label, label: c => ' $' + fmt.format(Math.round(c.parsed.y)) };
+  charts.push(new Chart(document.getElementById('c-vip'), { type: 'line', data: { labels: D.vip.labels.slice(1), datasets: [
+    line('USD tích lũy', D.vip.usd.slice(1), t.s1, { pointRadius: 3 })] }, options: o }));
+
+  o = base(t);
+  o.scales.y.ticks.callback = v => fmt.format(v);
+  o.plugins.tooltip.callbacks = { label: c => ' ' + c.dataset.label + ': ' + fmt.format(c.parsed.y) + ' gem' };
+  charts.push(new Chart(document.getElementById('c-lp'), { type: 'bar', data: { labels: D.lp.labels, datasets: [
+    { label: 'Nhánh miễn phí', data: D.lp.free, backgroundColor: t.s1, borderRadius: 4, borderColor: t.surface, borderWidth: { left: 2, right: 2 } },
+    { label: 'Nhánh trả phí ($19,99)', data: D.lp.paid, backgroundColor: t.s2, borderRadius: 4, borderColor: t.surface, borderWidth: { left: 2, right: 2 } }] }, options: o }));
+}
+build();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', build); } catch (e) {}
+new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+try {
+  var dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });
+} catch (e) {}
+</script>
+</body>
+</html>
